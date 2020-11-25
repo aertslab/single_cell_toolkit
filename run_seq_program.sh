@@ -1,6 +1,7 @@
 #!/bin/bash
 
-seq_root_dir=/staging/leuven/stg_00002/lcb/ghuls/software/seq
+# Set Seq root dir from environment variable (else use hard coded path).
+seq_root_dir="${seq_root_dir:-/staging/leuven/stg_00002/lcb/ghuls/software/seq}"
 
 
 run_seq_program () {
