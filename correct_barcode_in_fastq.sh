@@ -14,14 +14,9 @@ correct_barcode_in_fastq () {
     # Get script dir.
     local script_dir="$(cd $(dirname "${BASH_SOURCE}") && pwd)";
 
-    # Create a FIFO file for the FASTQ output, so correct_barcode_in_fastq_fast.seq can write data
-    local fastq_with_corrected_bc_fifo_filename="${fastq_with_corrected_bc_filename%.gz}_fifo";
-    rm -f "${fastq_with_corrected_bc_fifo_filename}";
-    mkfifo "${fastq_with_corrected_bc_fifo_filename}";
-
-
+    # Correct barcodes in FASTQ file.
     "${script_dir}/run_seq_program.sh" \
-        "${script_dir}/correct_barcode_in_fastq_fast.seq" \
+        "${script_dir}/correct_barcode_in_fastq.seq" \
         "${bc_whitelist_filename}" \
         "${fastq_with_raw_bc_filename}" \
         "/dev/stdout" \
@@ -33,4 +28,3 @@ correct_barcode_in_fastq () {
 
 
 correct_barcode_in_fastq "${@}";
-
