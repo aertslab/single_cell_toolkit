@@ -56,8 +56,8 @@ def correct_bc_with_whitelist(bc_whitelist: set[Kmer[16]], bc: Kmer[16]) -> Corr
 
 def correct_bc_in_fastq(bc_whitelist: set[Kmer[16]], fastq_with_raw_bc_filename: str, fastq_with_corrected_bc_filename: str, corrected_bc_stats_tsv_filename: str):
     """
-    Read FASTQ with barcodes and write a FASTQ with corrected barcodes for barcodes that
-    match the whitelist of barcodes closely enough, else write the original barcodes.
+    Read FASTQ file with barcodes and append " CB:Z:corrected_barcode" to the FASTQ record comment
+    if the barcode matches the whitelist (exact match or 1 mismatch).
     """
 
     nbr_reads = 0
@@ -85,12 +85,19 @@ def correct_bc_in_fastq(bc_whitelist: set[Kmer[16]], fastq_with_raw_bc_filename:
 
             corrected_bc = correct_bc_with_whitelist(bc_whitelist, Kmer[16](record.seq))
 
-            if corrected_bc.mismatch_dist == 0:
-                nbr_bc_0_mismatches += 1
-            elif corrected_bc.mismatch_dist == 1:
-                nbr_bc_1_mismatches += 1
 
-            fastq_with_corrected_bc_fh.write(f'@{record.name}{" " + record.comment if record.comment else ""}\n{corrected_bc.corrected_bc}\n+\n{record.qual}\n')
+            if corrected_bc.mismatch_dist == -1:
+                # Write original FASTQ record if the barcode did not match the whitelist (exact match or 1 mismatch).
+                fastq_with_corrected_bc_fh.write(f'@{record.name}{" " + record.comment if record.comment else ""}\n{record.seq}\n+\n{record.qual}\n')
+            else:
+                if corrected_bc.mismatch_dist == 0:
+                    nbr_bc_0_mismatches += 1
+                elif corrected_bc.mismatch_dist == 1:
+                    nbr_bc_1_mismatches += 1
+
+                # Write original FASTQ record if the barcode matched the whitelist (exact match or 1 mismatch)
+                # and append " CB:Z:corrected_barcode" to the FASTQ record comment.
+                fastq_with_corrected_bc_fh.write(f'@{record.name}{" " + record.comment if record.comment else ""} CB:Z:{corrected_bc.corrected_bc}\n{record.seq}\n+\n{record.qual}\n')
 
     with open(corrected_bc_stats_tsv_filename, 'w') as corrected_bc_stats_tsv_fh:
         corrected_bc_stats_tsv_fh.write(
