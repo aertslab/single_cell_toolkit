@@ -55,6 +55,13 @@ debarcode_10x_scatac_fastqs () {
                 # Read FASTQ R3 file (which contains read 2).
                 if ( (read_fastq_R3_cmd | getline fastq_R3_line) > 0 ) {
                     if ( fastq_part == 1 ) {
+                        # Get corrected barcode.
+                        CBn = split(fastq_R2_line,CB," ");
+                        corrected_barcode_tag = ""
+                        if(match(CB[CBn],"^CB")>0) {
+                            corrected_barcode_tag = CB[CBn]
+                            sub("^CB:Z:","",corrected_barcode_tag)
+                        }
                         # Extract read name from all input FASTQ files.
                         read_name_R1 = substr(fastq_R1_line, 2, index(fastq_R1_line, " ") - 2);
                         read_name_R2 = substr(fastq_R2_line, 2, index(fastq_R2_line, " ") - 2);
@@ -71,8 +78,8 @@ debarcode_10x_scatac_fastqs () {
                         read_name_R3_full = substr(fastq_R3_line, 2);
                     } else if ( fastq_part == 2 ) {
                         # Create output read names, by adding cell barcode from R2 input read before the original readname.
-                        read_name_fastq_R1_output = fastq_R2_line barcode_read_name_separator read_name_R1_full;
-                        read_name_fastq_R2_output = fastq_R2_line barcode_read_name_separator read_name_R3_full;
+                        read_name_fastq_R1_output = fastq_R2_line "-" corrected_barcode_tag barcode_read_name_separator read_name_R1_full;
+                        read_name_fastq_R2_output = fastq_R2_line "-" corrected_barcode_tag barcode_read_name_separator read_name_R3_full;
 
                         # Store sequence info from R1 and R3 for later use.
                         seq_fastq_R1_output = fastq_R1_line;
