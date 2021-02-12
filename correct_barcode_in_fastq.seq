@@ -2,6 +2,10 @@ import gzip
 import sys
 
 
+# Specify barcode length of barcodes in the whitelist.
+type K = Kmer[16]
+
+
 def read_barcode_whitelist_from_file[K](bc_whitelist_filename: str):
     """
     Read whitelisted barcodes from file and convert to a set of Kmers.
@@ -23,7 +27,7 @@ def read_barcode_whitelist_from_file[K](bc_whitelist_filename: str):
     return bc_whitelist
 
 
-def neighbors(kmer):
+def neighbors(kmer: K):
     """
     Create kmers with hamming distance of 1.
     """
@@ -37,7 +41,7 @@ def neighbors(kmer):
 type CorrectedBc(mismatch_dist: int, corrected_bc: str)
 
 
-def correct_bc_with_whitelist(bc_whitelist: set[Kmer[16]], bc: Kmer[16]) -> CorrectedBc:
+def correct_bc_with_whitelist(bc_whitelist: set[K], bc: K) -> CorrectedBc:
     """
     Check if provided barcode matches the whitelist (0 or 1 mismatch allowed).
     """
@@ -54,7 +58,7 @@ def correct_bc_with_whitelist(bc_whitelist: set[Kmer[16]], bc: Kmer[16]) -> Corr
     return CorrectedBc(-1, str(bc))
 
 
-def correct_bc_in_fastq(bc_whitelist: set[Kmer[16]], fastq_with_raw_bc_filename: str, fastq_with_corrected_bc_filename: str, corrected_bc_stats_tsv_filename: str):
+def correct_bc_in_fastq(bc_whitelist: set[K], fastq_with_raw_bc_filename: str, fastq_with_corrected_bc_filename: str, corrected_bc_stats_tsv_filename: str):
     """
     Read FASTQ file with barcodes and append " CB:Z:corrected_barcode" to the FASTQ record comment
     if the barcode matches the whitelist (exact match or 1 mismatch).
@@ -83,7 +87,7 @@ def correct_bc_in_fastq(bc_whitelist: set[Kmer[16]], fastq_with_raw_bc_filename:
         for record in FASTQ(fastq_with_raw_bc_filename, gzip=True, validate=False, copy=True):
             nbr_reads += 1
 
-            corrected_bc = correct_bc_with_whitelist(bc_whitelist, Kmer[16](record.seq))
+            corrected_bc = correct_bc_with_whitelist(bc_whitelist, K(record.seq))
 
 
             if corrected_bc.mismatch_dist == -1:
@@ -119,7 +123,7 @@ else:
     corrected_bc_stats_tsv_filename = sys.argv[4]
 
     # Read whitelisted barcodes from file and convert to a set of Kmers.
-    bc_whitelist = read_barcode_whitelist_from_file[Kmer[16]](bc_whitelist_filename)
+    bc_whitelist = read_barcode_whitelist_from_file[K](bc_whitelist_filename)
 
     # Read FASTQ with barcodes and write a FASTQ with corrected barcodes for barcodes that
     # match the whitelist of barcodes closely enough, else write the original barcodes.
