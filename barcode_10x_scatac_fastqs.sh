@@ -112,10 +112,29 @@ barcode_10x_scatac_fastqs () {
                 # Read FASTQ R3 file (which contains read 2).
                 if ( (read_fastq_R3_cmd | getline fastq_R3_line) > 0 ) {
                     if ( fastq_part == 1 ) {
+                        # Find first space position (0 if no comment found) in read name from all input FASTQ files.
+                        read_name_R1_space_pos = index(fastq_R1_line, " ");
+                        read_name_R2_space_pos = index(fastq_R2_line, " ");
+                        read_name_R3_space_pos = index(fastq_R3_line, " ");
+
                         # Extract read name from all input FASTQ files.
-                        read_name_R1 = substr(fastq_R1_line, 2, index(fastq_R1_line, " ") - 2);
-                        read_name_R2 = substr(fastq_R2_line, 2, index(fastq_R2_line, " ") - 2);
-                        read_name_R3 = substr(fastq_R3_line, 2, index(fastq_R3_line, " ") - 2);
+                        if (read_name_R1_space_pos > 0) {
+                            read_name_R1 = substr(fastq_R1_line, 2, read_name_R1_space_pos - 2);
+                        } else {
+                            read_name_R1 = substr(fastq_R1_line, 2);
+                        }
+
+                        if (read_name_R2_space_pos > 0) {
+                            read_name_R2 = substr(fastq_R2_line, 2, read_name_R2_space_pos - 2);
+                        } else {
+                            read_name_R2 = substr(fastq_R2_line, 2);
+                        }
+
+                        if (read_name_R3_space_pos > 0) {
+                            read_name_R3 = substr(fastq_R3_line, 2, read_name_R3_space_pos - 2);
+                        } else {
+                            read_name_R3 = substr(fastq_R3_line, 2);
+                        }
 
                         # Check if read names match between all 3 FASTQ files.
                         if ( read_name_R1 == read_name_R2 == read_name_R3 ) {
