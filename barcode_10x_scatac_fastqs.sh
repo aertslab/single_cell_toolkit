@@ -227,7 +227,7 @@ barcode_10x_scatac_fastqs () {
 
                         if (add_barcode_in_comment == 1) {
                             # Store read name comments for R2 input FASTQ file so we can extract existing comments, like a corrected barcode.
-                            read_name_R2_comment = substr(fastq_R2_line, length(read_name_R2) + 2);
+                            read_name_R2_comment = substr(fastq_R2_line, length(read_name_R2) + 3);
                         } else {
                             # Store full read names for R1 and R3 input FASTQ files.
                             read_name_R1_full = substr(fastq_R1_line, 2);
@@ -251,9 +251,9 @@ barcode_10x_scatac_fastqs () {
                             nbr_splits = split(read_name_R2_comment, read_name_R2_comment_array, / |\t/);
 
                             for ( i = 1; i <= nbr_splits; i++ ) {
-                                if ( $i ~ /^[A-Z]{2}:[ABfHiZ]:/ ) {
+                                if ( read_name_R2_comment_array[i] ~ /^[A-Za-z][A-Za-z]:[ABfHiZ]:/ ) {
                                     # Add SAM spec comment from original barcode file.
-                                    read_name_comment = read_name_comment "\t" $i;
+                                    read_name_comment = read_name_comment "\t" read_name_R2_comment_array[i];
                                 }
                             }
 
