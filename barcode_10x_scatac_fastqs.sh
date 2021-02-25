@@ -1,15 +1,15 @@
 #!/bin/bash
 #
-# Copyright (C) 2020 - Gert Hulselmans
+# Copyright (C) 2020-2021 - Gert Hulselmans
 #
 # Purpose:
-#   Debarcode 10x scATAC FASTQ files by adding the cell barcode from R2
-#   in from of the original read name for each read in R1 and R3
+#   Barcode 10x scATAC FASTQ files by adding the cell barcode from R2
+#   in front of the original read name for each read in R1 and R3
 #   (separated by barcode_read_name_separator (default: "-")).
 
 
 
-debarcode_10x_scatac_fastqs () {
+barcode_10x_scatac_fastqs () {
     local fastq_R1_filename="${1}";
     local fastq_R2_filename="${2}";
     local fastq_R3_filename="${3}";
@@ -20,9 +20,9 @@ debarcode_10x_scatac_fastqs () {
     local fastq_R2_output_filename="${fastq_output_prefix%.fastq.gz}_R2.fastq.gz";
 
     if [ ${#@} -lt 4 ] ; then
-        printf '\nUsage:   debarcode_10x_scatac_fastqs fastq_R1 fastq_R2 fastq_R3 fastq_output_prefix [barcode_read_name_separator]\n\n';
-        printf 'Purpose: Debarcode 10x scATAC FASTQ files by adding the cell barcode from R2\n';
-        printf '         in from of the original read name for each read in R1 and R3\n';
+        printf '\nUsage:   barcode_10x_scatac_fastqs fastq_R1 fastq_R2 fastq_R3 fastq_output_prefix [barcode_read_name_separator]\n\n';
+        printf 'Purpose: Barcode 10x scATAC FASTQ files by adding the cell barcode from R2\n';
+        printf '         in front of the original read name for each read in R1 and R3\n';
         printf '         (separated by barcode_read_name_separator (default: "-")).\n\n';
         return 1;
     fi
@@ -70,7 +70,7 @@ debarcode_10x_scatac_fastqs () {
                         read_name_R1_full = substr(fastq_R1_line, 2);
                         read_name_R3_full = substr(fastq_R3_line, 2);
                     } else if ( fastq_part == 2 ) {
-                        # Create output read names, by adding cell barcode from R2 input read before the original readname.
+                        # Create output read names, by adding cell barcode from R2 input read before the original read name.
                         read_name_fastq_R1_output = fastq_R2_line barcode_read_name_separator read_name_R1_full;
                         read_name_fastq_R2_output = fastq_R2_line barcode_read_name_separator read_name_R3_full;
 
@@ -92,5 +92,5 @@ debarcode_10x_scatac_fastqs () {
 
 
 
-debarcode_10x_scatac_fastqs "${@}";
+barcode_10x_scatac_fastqs "${@}";
 
