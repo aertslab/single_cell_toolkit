@@ -9,23 +9,76 @@
 
 
 
+decompress_fastq_cat_cmd='cat';
+decompress_fastq_zcat_cmd='zcat';
+
+
+# Number of threads to use to compress each FASTQ output file.
+compress_fastq_threads="${compress_fastq_threads:-4}";
+
+# Gzip compression level.
+compress_fastq_level="${compress_fastq_level:-6}";
+
+compress_fastq_bgzip_cmd="bgzip -@ ${compress_fastq_threads} -l ${compress_fastq_level} -c";
+compress_fastq_pigz_cmd="pigz -p ${compress_fastq_threads} -${compress_fastq_level} -c";
+compress_fastq_gzip_cmd="gzip -${compress_fastq_level} -c";
+
+
+
 barcode_10x_scatac_fastqs () {
     local fastq_R1_filename="${1}";
     local fastq_R2_filename="${2}";
     local fastq_R3_filename="${3}";
     local fastq_output_prefix="${4}";
     local barcode_read_name_separator="${5:-:}";
+    local compress_fastq_cmd="${6:-bgzip}";
 
     local fastq_R1_output_filename="${fastq_output_prefix%.fastq.gz}_R1.fastq.gz";
     local fastq_R2_output_filename="${fastq_output_prefix%.fastq.gz}_R2.fastq.gz";
 
     if [ ${#@} -lt 4 ] ; then
-        printf '\nUsage:   barcode_10x_scatac_fastqs fastq_R1 fastq_R2 fastq_R3 fastq_output_prefix [barcode_read_name_separator]\n\n';
+        printf '\nUsage:   barcode_10x_scatac_fastqs fastq_R1 fastq_R2 fastq_R3 fastq_output_prefix [barcode_read_name_separator] [bgzip|pigz|gzip]\n\n';
         printf 'Purpose: Barcode 10x scATAC FASTQ files by adding the cell barcode from R2\n';
         printf '         in front of the original read name for each read in R1 and R3\n';
         printf '         (separated by barcode_read_name_separator (default: "-")).\n\n';
+        printf '         Compression program to use for output FASTQ files:\n';
+        printf "           - bgzip:  '%s'  (default)\n" "${compress_fastq_bgzip_cmd}";
+        printf "           - pigz:   '%s'\n" "${compress_fastq_pigz_cmd}";
+        printf "           - gzip:   '%s'\n" "${compress_fastq_gzip_cmd}";
+        printf '           - full custom command\n\n';
+        printf '         To change number of compression threads:\n';
+        printf '           - export compress_fastq_threads="%s"\n\n' "${compress_fastq_threads}";
+        printf '         To change comprssion level:\n';
+        printf '           - export compress_fastq_level="%s"\n\n' "${compress_fastq_level}";
         return 1;
     fi
+
+    # Detect if input FASTQ files are gzip compressed or not.
+    if [ "${fastq_R1_filename}" != "${fastq_R1_filename%.gz}" ] ; then
+        local decompress_R1_fastq_cmd="${decompress_fastq_zcat_cmd}";
+    else
+        local decompress_R1_fastq_cmd="${decompress_fastq_cat_cmd}";
+    fi
+
+    if [ "${fastq_R2_filename}" != "${fastq_R2_filename%.gz}" ] ; then
+        local decompress_R2_fastq_cmd="${decompress_fastq_zcat_cmd}";
+    else
+        local decompress_R2_fastq_cmd="${decompress_fastq_cat_cmd}";
+    fi
+
+    if [ "${fastq_R3_filename}" != "${fastq_R3_filename%.gz}" ] ; then
+        local decompress_R3_fastq_cmd="${decompress_fastq_zcat_cmd}";
+    else
+        local decompress_R3_fastq_cmd="${decompress_fastq_cat_cmd}";
+    fi
+
+
+    case "${compress_fastq_cmd}" in
+        bgzip)  local compress_fastq_cmd="${compress_fastq_bgzip_cmd}";;
+        pigz)   local compress_fastq_cmd="${compress_fastq_pigz_cmd}";;
+        gzip)   local compress_fastq_cmd="${compress_fastq_gzip_cmd}";;
+    esac
+
 
     mawk \
         -v fastq_R1_filename="${fastq_R1_filename}" \
@@ -34,14 +87,18 @@ barcode_10x_scatac_fastqs () {
         -v fastq_R1_output_filename="${fastq_R1_output_filename}" \
         -v fastq_R2_output_filename="${fastq_R2_output_filename}" \
         -v barcode_read_name_separator="${barcode_read_name_separator}" \
+        -v decompress_R1_fastq_cmd="${decompress_R1_fastq_cmd}" \
+        -v decompress_R2_fastq_cmd="${decompress_R2_fastq_cmd}" \
+        -v decompress_R3_fastq_cmd="${decompress_R3_fastq_cmd}" \
+        -v compress_fastq_cmd="${compress_fastq_cmd}" \
     '
     BEGIN {
-        read_fastq_R1_cmd = "zcat " fastq_R1_filename;
-        read_fastq_R2_cmd = "zcat " fastq_R2_filename;
-        read_fastq_R3_cmd = "zcat " fastq_R3_filename;
+        read_fastq_R1_cmd = decompress_R1_fastq_cmd " " fastq_R1_filename;
+        read_fastq_R2_cmd = decompress_R2_fastq_cmd " " fastq_R2_filename;
+        read_fastq_R3_cmd = decompress_R3_fastq_cmd " " fastq_R3_filename;
 
-        write_fastq_R1_cmd = "bgzip -@ 4 -l 6 -c > " fastq_R1_output_filename;
-        write_fastq_R2_cmd = "bgzip -@ 4 -l 6 -c > " fastq_R2_output_filename;
+        write_fastq_R1_cmd = compress_fastq_cmd " > " fastq_R1_output_filename;
+        write_fastq_R2_cmd = compress_fastq_cmd " > " fastq_R2_output_filename;
 
         fastq_line_number = 0;
 
