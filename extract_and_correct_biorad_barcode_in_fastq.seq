@@ -5,7 +5,7 @@ import sys
 # Written in seq.
 #
 # Purpose: Extract barcodes from FASTQ file in BioRad design:
-#   https://github.com/caleblareau/bap/wiki/Working-with-BioRad-data  
+#   https://github.com/caleblareau/bap/wiki/Working-with-BioRad-data
 #
 
 # Barcoded read design:
@@ -18,6 +18,34 @@ import sys
 # Adapter 1 and 2 in Kmer form.
 adapter1_kmer = k'TATGCATGAC'
 adapter2_kmer = k'AGTCACTGAG'
+nexteraA_kmer = k'TCGTCGGCAGCGTC'
+me_kmer = k'AGATGTGTATAAGAGACAG'
+me_short_kmer = k'TAAGAGACAG'
+
+
+bc1_length: int = 7
+bc2_length: int = 7
+bc3_length: int = 7
+adapter1_length: int = 10
+adapter2_length: int = 10
+nexteraA_length: int = 14
+me_length: int  = 19
+me_short_length: int = 10
+
+type adapter1_kmer_type = Kmer[10]
+type adapter2_kmer_type = Kmer[10]
+type nexteraA_kmer_type = Kmer[14]
+type me_kmer_type = Kmer[19]
+type me_short_kmer_type = Kmer[10]
+type adapter1_1deletion_kmer_type = Kmer[9]
+type adapter2_1deletion_kmer_type = Kmer[9]
+type nexteraA_1deletion_kmer_type = Kmer[13]
+type me_1deletion_kmer_type = Kmer[18]
+type me_1insertion_kmer_type = Kmer[20]
+
+# Specify barcode length of barcodes in the whitelist.
+type barcode_kmer_type = Kmer[7]
+
 
 # All barcodes in Kmer form.
 barcode_kmers = {
@@ -33,18 +61,82 @@ barcode_kmers = {
     k'GAGTTGC', k'GGCGGAA', k'GTTAGGA', k'GTGCATT', k'GCCTCGT', k'GCTTTAT', k'GTGTGTC', k'GGCGTCC', k'CTCTTGC', k'CGGCTGC', k'CGGTACG', k'CGTACAA', k'CACATGA', k'CCGGTTT', k'CGACACT', k'CCTCCTT', k'CATGTAT', k'CTTCATC', k'CAGAGAG', k'TATGTGC', k'TCAAGAC', k'TTGGTTA', k'TGGTGAA', k'TTACAGA', k'TGAGATT', k'TTTGGTC', k'TTGGACT', k'TTCGTAC', k'TGAGGAG', k'ACCATGC', k'AGAGACC', k'AGCAACG', k'ACGAGAA', k'AACCACA', k'AACTCTT', k'ATGAGCT', k'AGGACGT', k'AGGATAC'
 }
 
-bc1_length: int = 7
-bc2_length: int = 7
-bc3_length: int = 7
-adapter1_const_length: int = 10
-adapter2_const_length: int = 10
 
-type adapter1_const_kmer_type = Kmer[10]
-type adapter2_const_kmer_type = Kmer[10]
+barcode_6bp_seqs_to_7bp: dict[seq, str] = dict[seq, str]()
+
+for barcode_7bp_kmer in barcode_kmers:
+    barcode_7bp_str = str(barcode_7bp_kmer)
+    for i in range(0, 7):
+        barcode_6bp_seq = seq(barcode_7bp_str[0:i] + barcode_7bp_str[i+1:7])
+
+        barcode_6bp_seqs_to_7bp[barcode_6bp_seq] = barcode_7bp_str
 
 
-# Specify barcode length of barcodes in the whitelist.
-type K = Kmer[7]
+adapter1_1deletion_set: set[adapter1_1deletion_kmer_type] = set[adapter1_1deletion_kmer_type]()
+
+adapter1_str = str(adapter1_kmer)
+for i in range(0, adapter1_length):
+    adapter1_1deletion_kmer = adapter1_1deletion_kmer_type(seq(adapter1_str[0:i] + adapter1_str[i+1:adapter1_length]))
+    adapter1_1deletion_set.add(adapter1_1deletion_kmer)
+
+
+adapter2_1deletion_set: set[adapter2_1deletion_kmer_type] = set[adapter2_1deletion_kmer_type]()
+
+adapter2_str = str(adapter2_kmer)
+for i in range(0, adapter2_length):
+    adapter2_1deletion_kmer = adapter2_1deletion_kmer_type(seq(adapter1_str[0:i] + adapter2_str[i+1:adapter2_length]))
+    adapter2_1deletion_set.add(adapter2_1deletion_kmer)
+
+
+nexteraA_1deletion_set: set[nexteraA_1deletion_kmer_type] = set[nexteraA_1deletion_kmer_type]()
+
+nexteraA_str = str(nexteraA_kmer)
+for i in range(0, nexteraA_length):
+    nexteraA_1deletion_kmer = nexteraA_1deletion_kmer_type(seq(nexteraA_str[0:i] + nexteraA_str[i+1:nexteraA_length]))
+    nexteraA_1deletion_set.add(nexteraA_1deletion_kmer)
+
+
+me_1deletion_set: set[me_1deletion_kmer_type] = set[me_1deletion_kmer_type]()
+me_1insertion_set: set[me_1insertion_kmer_type] = set[me_1insertion_kmer_type]()
+
+me_str = str(me_kmer)
+for i in range(0, me_length):
+    me_1deletion_kmer = me_1deletion_kmer_type(seq(me_str[0:i] + me_str[i+1:me_length]))
+    me_1deletion_set.add(me_1deletion_kmer)
+
+    for insertion_base in ('A', 'C', 'G', 'T'):
+        me_1insertion_kmer = me_1insertion_kmer_type(seq(me_str[0:i] + insertion_base + me_str[i:me_length]))
+        me_1insertion_set.add(me_1insertion_kmer)
+
+
+
+def neighbors(kmer):
+    """
+    Create kmers with hamming distance of 1.
+    """
+
+    for i in range(len(kmer)):
+        for b in (k'A', k'C', k'G', k'T'):
+            if kmer[i] != b:
+                yield kmer |> base(i, b)
+
+
+def match_or_one_mismatch(whitelist, adapter) -> int:
+    """
+    Check if provided adapter matches the whitelist (0 or 1 mismatch allowed).
+    """
+
+    if adapter in whitelist:
+        # Exact match.
+        return 0
+    for neighbor in neighbors(adapter):
+        if neighbor in whitelist:
+            # Hamming neighbor in whitelist (distance = 1).
+            return 1
+
+    # No match.
+    return -1
+
 
 
 type BC_part_raw(
@@ -87,102 +179,276 @@ def find_adapters(read: seq, qual: str) -> ParsedBCRead:
     }
 
     for phase_block_length in [0, 1, 2, 3, 4]:
-        adapter1_start = bc1_length + phase_block_length
-        adapter1_end = adapter1_start + adapter1_const_length
-        adapter1_seq_kmer = adapter1_const_kmer_type(
+        # Set current barcode lengths back to 7 on each iteration.
+        current_bc1_length = bc1_length
+        current_bc2_length = bc2_length
+        current_bc3_length = bc3_length
+
+        # Check for match of adapter 1 (3 mismatches allowed).
+        adapter1_start = current_bc1_length + phase_block_length
+        adapter1_end = adapter1_start + adapter1_length
+        adapter1_seq_kmer = adapter1_kmer_type(
             read[adapter1_start:adapter1_end]
         )
 
-        adapter2_start = adapter1_end + bc2_length
-        adapter2_end = adapter2_start + adapter2_const_length
-        adapter2_seq_kmer = adapter2_const_kmer_type(
+        adapter1_hamming_dist = abs(adapter1_seq_kmer - adapter1_kmer)
+
+        if adapter1_hamming_dist > 3:
+            if phase_block_length == 0:
+                # When there is no phase block, we check one position earlier in case the first
+                # barcode is 6 bp instead of 7 bp. For other phase blocks we don't do this as
+                # we have checked that possibility in the previous phase block iteration.
+                #
+                # Check for match of adapter 1 (3 mismatches allowed), but start one position earlier.
+                # (To detect if barcode 1 only is 6 bp instead of 7.)
+                adapter1_start -= 1
+                adapter1_end -= 1
+                adapter1_seq_kmer = adapter1_kmer_type(
+                    read[adapter1_start:adapter1_end]
+                )
+
+                adapter1_hamming_dist = abs(adapter1_seq_kmer - adapter1_kmer)
+
+                if adapter1_hamming_dist > 3:
+                    # Check for one basepair deletion in adapter 1 (1 mismatch allowed).
+                    adapter1_start += 1
+                    adapter1_1deletion_seq_kmer = adapter1_1deletion_kmer_type(read[adapter1_start:adapter1_end])
+
+                    adapter1_hamming_dist = match_or_one_mismatch(adapter1_1deletion_set, adapter1_1deletion_seq_kmer)
+
+                    if adapter1_hamming_dist == -1:
+                        # Go to next iteration of the phase block loop.
+                        continue
+                    else:
+                        # Add one to account for the deletion mismatch.
+                        adapter1_hamming_dist += 1
+
+                # Barcode 1 is 6 bp instead of 7 bp.
+                current_bc1_length -= 1
+            else:
+                # Check for one basepair deletion in adapter 1 (1 mismatch allowed).
+                adapter1_end -= 1
+                adapter1_1deletion_seq_kmer = adapter1_1deletion_kmer_type(read[adapter1_start:adapter1_end])
+
+                adapter1_hamming_dist = match_or_one_mismatch(adapter1_1deletion_set, adapter1_1deletion_seq_kmer)
+
+                if adapter1_hamming_dist == -1:
+                    # Go to next iteration of the phase block loop.
+                    continue
+                else:
+                    # Add one to account for the deletion mismatch.
+                    adapter1_hamming_dist += 1
+
+
+        # Check for match of adapter 2 (3 mismatches allowed).
+        adapter2_start = adapter1_end + current_bc2_length
+        adapter2_end = adapter2_start + adapter2_length
+        adapter2_seq_kmer = adapter2_kmer_type(
             read[adapter2_start:adapter2_end]
         )
 
-        adapter1_hamming_dist = abs(adapter1_seq_kmer - adapter1_kmer)
         adapter2_hamming_dist = abs(adapter2_seq_kmer - adapter2_kmer)
+
+        if adapter2_hamming_dist > 3:
+            # Check for match of adapter 2 (3 mismatches allowed), but start one position earlier.
+            # (To detect if barcode 2 only is 6 bp instead of 7).
+            adapter2_start -= 1
+            adapter2_end -= 1
+            adapter2_seq_kmer = adapter2_kmer_type(
+                read[adapter2_start:adapter2_end]
+            )
+
+            adapter2_hamming_dist = abs(adapter2_seq_kmer - adapter2_kmer)
+
+            if adapter2_hamming_dist > 3:
+                # Check for one basepair deletion in adapter 2 (1 mismatch allowed).
+                adapter2_start += 1
+                adapter2_1deletion_seq_kmer = adapter2_1deletion_kmer_type(read[adapter2_start:adapter2_end])
+
+                adapter2_hamming_dist = match_or_one_mismatch(adapter2_1deletion_set, adapter2_1deletion_seq_kmer)
+
+                if adapter2_hamming_dist == -1:
+                    # Go to next iteration of the phase block loop.
+                    continue
+                else:
+                    # Add one to account for the deletion mismatch.
+                    adapter2_hamming_dist += 1
+
+                continue
+
+            # Barcode 2 is 6 bp instead of 7 bp.
+            current_bc2_length -= 1
+
+
+        # Check for match of nextera A adapter (4 mismatches allowed).
+        nexteraA_start = adapter2_end + current_bc3_length
+        nexteraA_end = nexteraA_start + nexteraA_length
+        nexteraA_seq_kmer = nexteraA_kmer_type(
+            read[nexteraA_start:nexteraA_end]
+        )
+
+        nexteraA_hamming_dist = abs(nexteraA_seq_kmer - nexteraA_kmer)
+
+        if nexteraA_hamming_dist > 4:
+            # Check for match of nextera A adapter (4 mismatches allowed), but start one position earlier.
+            # (To detect if barcode 3 only is 6 bp instead of 7.)
+            nexteraA_start -= 1
+            nexteraA_end -= 1
+            nexteraA_seq_kmer = nexteraA_kmer_type(
+                read[nexteraA_start:nexteraA_end]
+            )
+
+            nexteraA_hamming_dist = abs(nexteraA_seq_kmer - nexteraA_kmer)
+
+            if nexteraA_hamming_dist > 4:
+                # Check for one basepair deletion in nextera adapter (1 mismatch allowed).
+                nexteraA_start += 1
+                nexteraA_1deletion_seq_kmer = nexteraA_1deletion_kmer_type(read[nexteraA_start:nexteraA_end])
+
+                nexteraA_hamming_dist = match_or_one_mismatch(nexteraA_1deletion_set, nexteraA_1deletion_seq_kmer)
+
+                if nexteraA_hamming_dist == -1:
+                    # Go to next iteration of the phase block loop.
+                    continue
+                else:
+                    # Add one to account for the deletion mismatch.
+                    nexteraA_hamming_dist += 1
+
+            # Barcode 3 is 6 bp instead of 7 bp.
+            current_bc3_length -= 1
+
+
+        read_length = len(read)
+        me_found = False
+        me_start = nexteraA_end - 1
+        me_end = me_start + me_length
+
+        # Check from end position of nextera A (minus one) for ME adapter, till the end of the read.
+        for me_start in range(nexteraA_end - 1, read_length - me_length):
+            # Check for match of ME adapter at the current position (3 mismatches allowed).
+            me_end = me_start + me_length
+            me_seq_kmer = me_kmer_type(
+                read[me_start:me_end]
+            )
+
+            me_hamming_dist = abs(me_seq_kmer - me_kmer)
+
+            if me_hamming_dist > 3:
+                # Check for one basepair deletion in ME adapter (1 mismatch allowed).
+                me_end -= 1
+                me_1deletion_seq_kmer = me_1deletion_kmer_type(read[me_start:me_end])
+
+                me_hamming_dist = match_or_one_mismatch(me_1deletion_set, me_1deletion_seq_kmer)
+
+                if me_hamming_dist >= 0:
+                   # Add one to account for the deletion mismatch.
+                   me_hamming_dist += 1
+                   me_found = True
+                   break
+                else:
+                   # Check for one basepair insertion in ME adapter (1 mismatch allowed).
+                   me_end += 2
+                   me_1insertion_seq_kmer = me_1insertion_kmer_type(read[me_start:me_end])
+
+                   me_hamming_dist = match_or_one_mismatch(me_1insertion_set, me_1insertion_seq_kmer)
+
+                   if me_hamming_dist >= 0:
+                       # Add one to account for the deletion mismatch.
+                       me_hamming_dist += 1
+                       me_found = True
+                       break
+                   else:
+                       # Check shortened ME adapter (1 mismatch allowed).
+                       me_end = me_start + me_short_length
+                       me_short_seq_kmer = me_short_kmer_type(
+                           read[me_start:me_end]
+                       )
+
+                       me_hamming_dist = match_or_one_mismatch(set([me_short_kmer]), me_short_seq_kmer)
+
+                       if me_hamming_dist >= 0:
+                           # Add some additional mismatches as we only matched for the last 10 base pairs.
+                           me_hamming_dist += me_length - me_short_length
+                           me_found = True
+                           break
+            else:
+                me_found = True
+                break
+
+        if me_found == False:
+            # Go to next iteration of the phase block loop.
+            continue
+
 
         phase_block_seq_from_read = s'NNNN'
 
-        if adapter1_hamming_dist <= 2 and adapter2_hamming_dist <= 2:
-            if phase_block_length > 0:
-                for phase_block_seq in phase_block_length_to_seqs[phase_block_length]:
-                    if phase_block_length == 4:
-                        # Skip first N of phase block sequence.
-                        phase_block_seq_from_read = read[bc1_length + 1:bc1_length + 4]  
-                    else:
-                        phase_block_seq_from_read = read[bc1_length:bc1_length + phase_block_length]  
+        if phase_block_length > 0:
+            for phase_block_seq in phase_block_length_to_seqs[phase_block_length]:
+                if phase_block_length == 4:
+                    # Skip first N of phase block sequence.
+                    phase_block_seq_from_read = read[current_bc1_length + 1:current_bc1_length + 4]
+                else:
+                    phase_block_seq_from_read = read[current_bc1_length:current_bc1_length + phase_block_length]
 
-                    if phase_block_seq == phase_block_seq_from_read:
-                        # Collect BC1, BC2, BC3 sequences and associated quality scores.
-                        bc_parts_raw = BC_parts_raw(
-                             BC_part_raw(
-                                 read[0:bc1_length],
-                                 qual[0:bc1_length]
-                             ),
-                             BC_part_raw(
-                                 read[adapter1_end:adapter1_end + bc2_length],
-                                 qual[adapter1_end:adapter1_end + bc2_length]
-                             ),
-                             BC_part_raw(
-                                 read[adapter2_end:adapter2_end + bc3_length],
-                                 qual[adapter2_end:adapter2_end + bc3_length]
-                             )
+                if phase_block_seq == phase_block_seq_from_read:
+                    # Collect BC1, BC2, BC3 sequences and associated quality scores.
+                    bc_parts_raw = BC_parts_raw(
+                        BC_part_raw(
+                            read[0:current_bc1_length],
+                            qual[0:current_bc1_length]
+                        ),
+                        BC_part_raw(
+                            read[adapter1_end:adapter1_end + current_bc2_length],
+                            qual[adapter1_end:adapter1_end + current_bc2_length]
+                        ),
+                        BC_part_raw(
+                            read[adapter2_end:adapter2_end + current_bc3_length],
+                            qual[adapter2_end:adapter2_end + current_bc3_length]
                         )
+                    )
 
-                        return ParsedBCRead(
-                            True,
-                            bc_parts_raw,
-                            phase_block_seq,
-                            phase_block_length,
-                            adapter1_hamming_dist,
-                            adapter2_hamming_dist
-                        )
-            else:
-                # Collect BC1, BC2, BC3 sequences and associated quality scores.
-                bc_parts_raw = BC_parts_raw(
-                     BC_part_raw(
-                         read[0:bc1_length],
-                         qual[0:bc1_length]
-                     ),
-                     BC_part_raw(
-                         read[adapter1_end:adapter1_end + bc2_length],
-                         qual[adapter1_end:adapter1_end + bc2_length]
-                     ),
-                     BC_part_raw(
-                         read[adapter2_end:adapter2_end + bc3_length],
-                         qual[adapter2_end:adapter2_end + bc3_length]
-                     )
+                    return ParsedBCRead(
+                        True,
+                        bc_parts_raw,
+                        phase_block_seq,
+                        phase_block_length,
+                        adapter1_hamming_dist,
+                        adapter2_hamming_dist
+                    )
+        else:
+            # Collect BC1, BC2, BC3 sequences and associated quality scores.
+            bc_parts_raw = BC_parts_raw(
+                BC_part_raw(
+                    read[0:current_bc1_length],
+                    qual[0:current_bc1_length]
+                ),
+                BC_part_raw(
+                    read[adapter1_end:adapter1_end + current_bc2_length],
+                    qual[adapter1_end:adapter1_end + current_bc2_length]
+                ),
+                BC_part_raw(
+                    read[adapter2_end:adapter2_end + current_bc3_length],
+                    qual[adapter2_end:adapter2_end + current_bc3_length]
                 )
+            )
 
-                return ParsedBCRead(
-                    True,
-                    bc_parts_raw,
-                    s'',
-                    phase_block_length,
-                    adapter1_hamming_dist,
-                    adapter2_hamming_dist
-                )
+            return ParsedBCRead(
+                True,
+                bc_parts_raw,
+                s'',
+                phase_block_length,
+                adapter1_hamming_dist,
+                adapter2_hamming_dist
+            )
 
     return not_found_adapters
 
 
 
-def neighbors(kmer: K):
-    """
-    Create kmers with hamming distance of 1.
-    """
-
-    for i in range(len(kmer)):
-        for b in (k'A', k'C', k'G', k'T'):
-            if kmer[i] != b:
-                yield kmer |> base(i, b)
-
-
 type CorrectedBc(mismatch_dist: int, corrected_bc: str)
 
 
-def correct_bc_with_whitelist(bc_whitelist: set[K], bc: K) -> CorrectedBc:
+def correct_bc_with_whitelist(bc_whitelist: set[barcode_kmer_type], bc: barcode_kmer_type) -> CorrectedBc:
     """
     Check if provided barcode matches the whitelist (0 or 1 mismatch allowed).
     """
@@ -217,7 +483,7 @@ def extract_and_correct_biorad_barcode_in_fastq(fastq_with_raw_bc_filename: str,
     nbr_reads = 0
     nbr_reads_with_adapters_needed_to_find_bcs = 0
 
-    # Keep track of number of reads that have a barcode part with >1 , 0 or 1 mismatch. 
+    # Keep track of number of reads that have a barcode part with >1 , 0 or 1 mismatch.
     nbr_reads_with_bcs = [
         # Barcode 1: more than 1 mismatch, 0 mismatches, 1 mismatch.
         [0, 0, 0],
@@ -242,14 +508,43 @@ def extract_and_correct_biorad_barcode_in_fastq(fastq_with_raw_bc_filename: str,
             else:
                 nbr_reads_with_adapters_needed_to_find_bcs += 1
 
-                # Get raw barcodes.
-                bc1_kmer = Kmer[7](parsed_bc_read.bc_parts_raw.bc1_raw.seq)
-                bc2_kmer = Kmer[7](parsed_bc_read.bc_parts_raw.bc2_raw.seq)
-                bc3_kmer = Kmer[7](parsed_bc_read.bc_parts_raw.bc3_raw.seq)
+                corrected_bc1 = CorrectedBc(-1, '')
+                corrected_bc2 = CorrectedBc(-1, '')
+                corrected_bc3 = CorrectedBc(-1, '')
 
-                corrected_bc1 = correct_bc_with_whitelist(barcode_kmers, bc1_kmer)
-                corrected_bc2 = correct_bc_with_whitelist(barcode_kmers, bc2_kmer)
-                corrected_bc3 = correct_bc_with_whitelist(barcode_kmers, bc3_kmer)
+                # Get raw barcodes.
+                if len(parsed_bc_read.bc_parts_raw.bc1_raw.seq) == 6:
+                    bc1_6bp_seq = parsed_bc_read.bc_parts_raw.bc1_raw.seq
+
+                    if bc1_6bp_seq in barcode_6bp_seqs_to_7bp:
+                        corrected_bc1 = CorrectedBc(1, barcode_6bp_seqs_to_7bp[bc1_6bp_seq])
+                    else:
+                        corrected_bc1 = CorrectedBc(-1, str(bc1_6bp_seq))
+                else:
+                    bc1_kmer = Kmer[7](parsed_bc_read.bc_parts_raw.bc1_raw.seq)
+                    corrected_bc1 = correct_bc_with_whitelist(barcode_kmers, bc1_kmer)
+
+                if len(parsed_bc_read.bc_parts_raw.bc2_raw.seq) == 6:
+                    bc2_6bp_seq = parsed_bc_read.bc_parts_raw.bc2_raw.seq
+
+                    if bc2_6bp_seq in barcode_6bp_seqs_to_7bp:
+                        corrected_bc2 = CorrectedBc(1, barcode_6bp_seqs_to_7bp[bc2_6bp_seq])
+                    else:
+                        corrected_bc2 = CorrectedBc(-1, str(bc2_6bp_seq))
+                else:
+                    bc2_kmer = Kmer[7](parsed_bc_read.bc_parts_raw.bc2_raw.seq)
+                    corrected_bc2 = correct_bc_with_whitelist(barcode_kmers, bc2_kmer)
+
+                if len(parsed_bc_read.bc_parts_raw.bc3_raw.seq) == 6:
+                    bc3_6bp_seq = parsed_bc_read.bc_parts_raw.bc3_raw.seq
+
+                    if bc3_6bp_seq in barcode_6bp_seqs_to_7bp:
+                        corrected_bc3 = CorrectedBc(1, barcode_6bp_seqs_to_7bp[bc3_6bp_seq])
+                    else:
+                        corrected_bc3 = CorrectedBc(-1, str(bc3_6bp_seq))
+                else:
+                    bc3_kmer = Kmer[7](parsed_bc_read.bc_parts_raw.bc3_raw.seq)
+                    corrected_bc3 = correct_bc_with_whitelist(barcode_kmers, bc3_kmer)
 
                 # Collect statistics of barcode mismatches for each part of the barcode.
                 # As more than 1 mismatch is indicated by -1, we put that one in index 0.
