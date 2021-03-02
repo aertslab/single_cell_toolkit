@@ -150,14 +150,25 @@ type BC_parts_raw(
     bc3_raw: BC_part_raw
 )
 
+type AdaptersHammingDists(
+    adapter1: int,
+    adapter2: int,
+    nexteraA: int,
+    me: int,
+)
+
+type ATAC_part(
+    seq: seq,
+    qual: str
+)
 
 type ParsedBCRead(
-    found_adapters: bool,
+    found_all_adapters: bool,
     bc_parts_raw: BC_parts_raw,
+    atac_part: ATAC_part,
     phase_block_seq: seq,
     phase_block_length: int,
-    adapter1_hamming_dist: int,
-    adapter2_hamming_dist: int
+    adapters_hamming_dists: AdaptersHammingDists
 ):
     def bc_full_seq(self) -> str:
        return str(self.bc_parts_raw.bc1_raw.seq) + str(self.bc_parts_raw.bc2_raw.seq) + str(self.bc_parts_raw.bc3_raw.seq)	
@@ -166,7 +177,18 @@ type ParsedBCRead(
        return self.bc_parts_raw.bc1_raw.qual + self.bc_parts_raw.bc2_raw.qual + self.bc_parts_raw.bc3_raw.qual
 	
 
-not_found_adapters = ParsedBCRead(False, BC_parts_raw(BC_part_raw(s'', ''), BC_part_raw(s'', ''), BC_part_raw(s'', '')), s'', -1, -1, -1)
+not_found_all_adapters = ParsedBCRead(
+    False,
+    BC_parts_raw(
+        BC_part_raw(s'', ''),
+        BC_part_raw(s'', ''),
+        BC_part_raw(s'', '')
+    ),
+    ATAC_part(s'', ''),
+    s'',
+    -1,
+    AdaptersHammingDists(-1, -1, -1, -1)
+)
 
 
 def find_adapters(read: seq, qual: str) -> ParsedBCRead:
@@ -322,6 +344,7 @@ def find_adapters(read: seq, qual: str) -> ParsedBCRead:
         me_found = False
         me_start = nexteraA_end - 1
         me_end = me_start + me_length
+        me_hamming_dist = -1
 
         # Check from end position of nextera A (minus one) for ME adapter, till the end of the read.
         for me_start in range(nexteraA_end - 1, read_length - me_length):
@@ -380,68 +403,46 @@ def find_adapters(read: seq, qual: str) -> ParsedBCRead:
             continue
 
 
-        phase_block_seq_from_read = s'NNNN'
+        phase_block_seq_from_read = s''
 
         if phase_block_length > 0:
-            for phase_block_seq in phase_block_length_to_seqs[phase_block_length]:
-                if phase_block_length == 4:
-                    # Skip first N of phase block sequence.
-                    phase_block_seq_from_read = read[current_bc1_length + 1:current_bc1_length + 4]
-                else:
-                    phase_block_seq_from_read = read[current_bc1_length:current_bc1_length + phase_block_length]
+            phase_block_seq_from_read = read[current_bc1_length:current_bc1_length + phase_block_length]
 
-                if phase_block_seq == phase_block_seq_from_read:
-                    # Collect BC1, BC2, BC3 sequences and associated quality scores.
-                    bc_parts_raw = BC_parts_raw(
-                        BC_part_raw(
-                            read[0:current_bc1_length],
-                            qual[0:current_bc1_length]
-                        ),
-                        BC_part_raw(
-                            read[adapter1_end:adapter1_end + current_bc2_length],
-                            qual[adapter1_end:adapter1_end + current_bc2_length]
-                        ),
-                        BC_part_raw(
-                            read[adapter2_end:adapter2_end + current_bc3_length],
-                            qual[adapter2_end:adapter2_end + current_bc3_length]
-                        )
-                    )
-
-                    return ParsedBCRead(
-                        True,
-                        bc_parts_raw,
-                        phase_block_seq,
-                        phase_block_length,
-                        adapter1_hamming_dist,
-                        adapter2_hamming_dist
-                    )
-        else:
-            # Collect BC1, BC2, BC3 sequences and associated quality scores.
-            bc_parts_raw = BC_parts_raw(
-                BC_part_raw(
-                    read[0:current_bc1_length],
-                    qual[0:current_bc1_length]
-                ),
-                BC_part_raw(
-                    read[adapter1_end:adapter1_end + current_bc2_length],
-                    qual[adapter1_end:adapter1_end + current_bc2_length]
-                ),
-                BC_part_raw(
-                    read[adapter2_end:adapter2_end + current_bc3_length],
-                    qual[adapter2_end:adapter2_end + current_bc3_length]
-                )
+        # Collect barcode 1, 2 and 3 sequences and associated quality scores.
+        bc_parts_raw = BC_parts_raw(
+            BC_part_raw(
+                read[0:current_bc1_length],
+                qual[0:current_bc1_length]
+            ),
+            BC_part_raw(
+                read[adapter1_end:adapter1_end + current_bc2_length],
+                qual[adapter1_end:adapter1_end + current_bc2_length]
+            ),
+            BC_part_raw(
+                read[adapter2_end:adapter2_end + current_bc3_length],
+                qual[adapter2_end:adapter2_end + current_bc3_length]
             )
+        )
 
-            return ParsedBCRead(
-                True,
-                bc_parts_raw,
-                s'',
-                phase_block_length,
+        # Extract ATAC part from the read.
+        atac_part = ATAC_part(read[me_end:], qual[me_end:])
+
+        return ParsedBCRead(
+            True,
+            bc_parts_raw,
+            atac_part,
+            phase_block_seq_from_read,
+            phase_block_length,
+            AdaptersHammingDists(
                 adapter1_hamming_dist,
-                adapter2_hamming_dist
+                adapter2_hamming_dist,
+                nexteraA_hamming_dist,
+                me_hamming_dist,
             )
+        )
 
-    return not_found_adapters
+    # Return not found when not all adapters could be found in the read.
+    return not_found_all_adapters
 
 
 
@@ -502,9 +503,9 @@ def extract_and_correct_biorad_barcode_in_fastq(fastq_with_raw_bc_filename: str,
 
             parsed_bc_read = find_adapters(record.seq, record.qual)
 
-            if parsed_bc_read.found_adapters == False:
-                # Add Biorad tag "br:Z:FoundNoAdapters" to read name comment and write raw barcode of Ns.
-                fastq_with_corrected_bc_fh.write(f'@{record.name} br:Z:FoundNoAdapters\nNNNNNNNNNNNNNNNNNNNNN\n+\nAAAAAAAAAAAAAAAAAAAAA\n')
+            if parsed_bc_read.found_all_adapters == False:
+                # Add Biorad tag "br:Z:FoundNotAllAdapters" to read name comment and write ATAC sequence of Ns.
+                fastq_with_corrected_bc_fh.write(f'@{record.name} br:Z:FoundNotAllAdapters\nNNNN\n+\nAAAA\n')
             else:
                 nbr_reads_with_adapters_needed_to_find_bcs += 1
 
@@ -555,13 +556,15 @@ def extract_and_correct_biorad_barcode_in_fastq(fastq_with_raw_bc_filename: str,
                 if corrected_bc1.mismatch_dist == -1 or corrected_bc2.mismatch_dist == -1 or corrected_bc3.mismatch_dist == -1:
                     # At least one of the barcode parts could not be corrected.
                     # Add Biorad tag "br:Z:" to read name comment with number of mismatches for each barcode part.
-                    fastq_with_corrected_bc_fh.write(f'@{record.name} br:Z:{corrected_bc1.mismatch_dist},{corrected_bc2.mismatch_dist},{corrected_bc3.mismatch_dist}\n{parsed_bc_read.bc_full_seq()}\n+\n{parsed_bc_read.bc_full_qual()}\n')
+                    #fastq_with_corrected_bc_fh.write(f'@{record.name} tbr:Z:{corrected_bc1.mismatch_dist},{corrected_bc2.mismatch_dist},{corrected_bc3.mismatch_dist}\n{parsed_bc_read.bc_full_seq()}\n+\n{parsed_bc_read.bc_full_qual()}\n')
+                    fastq_with_corrected_bc_fh.write(f'@{record.name} CR:Z:{parsed_bc_read.bc_full_seq()}\tCY:Z:{parsed_bc_read.bc_full_qual()}\tbr:Z:{corrected_bc1.mismatch_dist},{corrected_bc2.mismatch_dist},{corrected_bc3.mismatch_dist}_{parsed_bc_read.adapters_hamming_dists.adapter1},{parsed_bc_read.adapters_hamming_dists.adapter2},{parsed_bc_read.adapters_hamming_dists.nexteraA},{parsed_bc_read.adapters_hamming_dists.me}\n{parsed_bc_read.atac_part.seq}\n+\n{parsed_bc_read.atac_part.qual}\n')
                 else:
                     nbr_reads_with_bc1_bc2_bc3_correct_or_correctable += 1
 
                     # Write the corrected barcode as CB tag in the FASTQ comment.
                     # Add Biorad tag "br:Z:" to read name comment with number of mismatches for each barcode part.
-                    fastq_with_corrected_bc_fh.write(f'@{record.name} CB:Z:{corrected_bc1.corrected_bc}{corrected_bc2.corrected_bc}{corrected_bc3.corrected_bc}\tbr:Z:{corrected_bc1.mismatch_dist},{corrected_bc2.mismatch_dist},{corrected_bc3.mismatch_dist}\n{parsed_bc_read.bc_full_seq()}\n+\n{parsed_bc_read.bc_full_qual()}\n')
+                    #fastq_with_corrected_bc_fh.write(f'@{record.name} CB:Z:{corrected_bc1.corrected_bc}{corrected_bc2.corrected_bc}{corrected_bc3.corrected_bc}\tbr:Z:{corrected_bc1.mismatch_dist},{corrected_bc2.mismatch_dist},{corrected_bc3.mismatch_dist}\n{parsed_bc_read.bc_full_seq()}\n+\n{parsed_bc_read.bc_full_qual()}\n')
+                    fastq_with_corrected_bc_fh.write(f'@{record.name} CR:Z:{parsed_bc_read.bc_full_seq()}\tCY:Z:{parsed_bc_read.bc_full_qual()}\tCB:Z:{corrected_bc1.corrected_bc}{corrected_bc2.corrected_bc}{corrected_bc3.corrected_bc}\tbr:Z:{corrected_bc1.mismatch_dist},{corrected_bc2.mismatch_dist},{corrected_bc3.mismatch_dist}_{parsed_bc_read.adapters_hamming_dists.adapter1},{parsed_bc_read.adapters_hamming_dists.adapter2},{parsed_bc_read.adapters_hamming_dists.nexteraA},{parsed_bc_read.adapters_hamming_dists.me}\n{parsed_bc_read.atac_part.seq}\n+\n{parsed_bc_read.atac_part.qual}\n')
 
     with open(corrected_bc_stats_tsv_filename, 'w') as corrected_bc_stats_tsv_fh:
         corrected_bc_stats_tsv_fh.write(
