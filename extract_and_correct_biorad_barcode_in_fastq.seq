@@ -1,0 +1,299 @@
+import sys
+
+
+#
+# Written in seq.
+#
+# Purpose: Extract barcodes from FASTQ file in BioRad design:
+#   https://github.com/caleblareau/bap/wiki/Working-with-BioRad-data  
+#
+
+# Barcoded read design:
+#									
+#    ATAC-v2.1	Bead-TTTTTTTUUUTTTTTAATGATACGGCGACCACCGAGATCTACACGCCTGTCCGCGGAAGCAGTGGTATCAACGCAGAGTACHHHHHHH[0-4]TATGCATGACHHHHHHHAGTCACTGAGHHHHHHHTGGTAGAGAGGGTG								
+#									
+#		BC1	Phase Block	Constant1	BC2	Constant2	BC3	Nextera A	ME
+#		HHHHHHH	none/A/CG/GCC/NVGC	TATGCATGAC	HHHHHHH	AGTCACTGAG	HHHHHHH	TCGTCGGCAGCGTC	AGATGTGTATAAGAGACAG
+
+# Adapter 1 and 2 in Kmer form.
+adapter1_kmer = k'TATGCATGAC'
+adapter2_kmer = k'AGTCACTGAG'
+
+# All barcodes in Kmer form.
+barcode_kmers = {
+    # phase block length 0
+    k'GGACGAC', k'GCAGTGT', k'GAGAGGT', k'GAACCGT', k'GGTTAGT', k'GCCTTTG', k'GATAGAC', k'GTGGTAG', k'GTAATAC', k'CGAGGTC', k'CATCAGT', k'CCAAGCT', k'CCTTAGG', k'CACGGAC', k'CAGGCGG', k'CCGAACC', k'CACTTCT', k'CTGGCAT', k'CGATTAC', k'TCGTTCT', k'TGCTACT', k'TTCCTCT', k'TACTTTC', k'TGAATCC', k'TAGTACC', k'TTATCAT', k'TGATTGT', k'TGGCAAC', k'TGTTTAG', k'AGTTTCT', k'ATGGTGT', k'ATTGCCT', k'ACTCAAT', k'AGACCAT', k'AGCGAAT', k'ACCTACC', k'AGATAGG', k'AAGGTTC', k'AGGCATG',
+    # phase block length 1
+    k'GTGGCGC', k'GGTCGTA', k'GTGTCCA', k'GAGGACA', k'GTCCTTC', k'GAGCGTG', k'GATCACC', k'GTTGATG', k'CATACGC', k'CTGCGCC', k'CGTAGCC', k'CGCGGCG', k'CATCTTA', k'CCAGTCA', k'CGTTTGA', k'CCACTTG', k'CTAACTC', k'CGAGTGG', k'TCCTGGC', k'TGACCGC', k'TAAGGTA', k'TCGCGCA', k'TCATACA', k'TAAGAGG', k'TGGAAGG', k'TCCGCTC', k'TAACGCC', k'TGCGTTG', k'TCGGATG', k'AGCCGCC', k'ACACGCG', k'ACTACGA', k'AATGGCC', k'ATGTTCC', k'ACGTTGG', k'AGACTTC', k'ATATAAC', k'ATAGTTG',
+    # phase block length 2
+    k'GCACAGC', k'GACAATA', k'GAATCAA', k'GCTCCAA', k'GCGTAGA', k'GGAAGTT', k'GGAGCCT', k'GAATATG', k'GGTTCAC', k'CTAGAGC', k'CGTGATA', k'CGCCTAA', k'CGATGCA', k'CTTGCGA', k'CCATAAT', k'CCTATGT', k'CGCGCTT', k'CCGCGAT', k'CGGCCAG', k'TTGAGGC', k'TTTCCTA', k'TCAGCAA', k'TCCTTAA', k'TGGACCA', k'TAGTGTT', k'TATACTT', k'TGTCGCT', k'TACGCAT', k'TTGTAAG', k'TGTAGTG', k'AGTAAGC', k'ATGAATA', k'AACGTAA', k'AATTCCA', k'AATGATT', k'AAGTTAT', k'ACAGCTT', k'AGCTGAG', k'ACAGTAC',
+    # phase block length 3
+    k'GGCAGGC', k'GCGCACG', k'GAGCTAA', k'GGTAACA', k'GCTAATT', k'GTCGGTT', k'GGTGTTT', k'GCGACTC', k'CTTACCG', k'CTATTCG', k'CTAAGAA', k'CACGCCA', k'CGGAGGA', k'CTTGTCC', k'CTCATTT', k'CGGATCT', k'CAGAATT', k'CGCAATC', k'TGCGAGC', k'TTAAGCG', k'TCTTGTA', k'TACCGAA', k'TTCTGCA', k'TCCAGTT', k'TGGCCTT', k'TCGGCGT', k'TCTGAAC', k'TCGACAG', k'AAGCAGC', k'ATTCACG', k'AAGTGCG', k'ATAGGCA', k'ATTCGTT', k'ACGTATT', k'ACCGGCT', k'AATTGGT', k'ATTATTC', k'AACGGTG',
+    # phase block length 4
+    k'GAGTTGC', k'GGCGGAA', k'GTTAGGA', k'GTGCATT', k'GCCTCGT', k'GCTTTAT', k'GTGTGTC', k'GGCGTCC', k'CTCTTGC', k'CGGCTGC', k'CGGTACG', k'CGTACAA', k'CACATGA', k'CCGGTTT', k'CGACACT', k'CCTCCTT', k'CATGTAT', k'CTTCATC', k'CAGAGAG', k'TATGTGC', k'TCAAGAC', k'TTGGTTA', k'TGGTGAA', k'TTACAGA', k'TGAGATT', k'TTTGGTC', k'TTGGACT', k'TTCGTAC', k'TGAGGAG', k'ACCATGC', k'AGAGACC', k'AGCAACG', k'ACGAGAA', k'AACCACA', k'AACTCTT', k'ATGAGCT', k'AGGACGT', k'AGGATAC'
+}
+
+bc1_length: int = 7
+bc2_length: int = 7
+bc3_length: int = 7
+adapter1_const_length: int = 10
+adapter2_const_length: int = 10
+
+type adapter1_const_kmer_type = Kmer[10]
+type adapter2_const_kmer_type = Kmer[10]
+
+
+# Specify barcode length of barcodes in the whitelist.
+type K = Kmer[7]
+
+
+type BC_part_raw(
+    seq: seq,
+    qual: str
+)
+
+type BC_parts_raw(
+    bc1_raw: BC_part_raw,
+    bc2_raw: BC_part_raw,
+    bc3_raw: BC_part_raw
+)
+
+
+type ParsedBCRead(
+    found_adapters: bool,
+    bc_parts_raw: BC_parts_raw,
+    phase_block_seq: seq,
+    phase_block_length: int,
+    adapter1_hamming_dist: int,
+    adapter2_hamming_dist: int
+):
+    def bc_full_seq(self) -> str:
+       return str(self.bc_parts_raw.bc1_raw.seq) + str(self.bc_parts_raw.bc2_raw.seq) + str(self.bc_parts_raw.bc3_raw.seq)	
+
+    def bc_full_qual(self) -> str:
+       return self.bc_parts_raw.bc1_raw.qual + self.bc_parts_raw.bc2_raw.qual + self.bc_parts_raw.bc3_raw.qual
+	
+
+not_found_adapters = ParsedBCRead(False, BC_parts_raw(BC_part_raw(s'', ''), BC_part_raw(s'', ''), BC_part_raw(s'', '')), s'', -1, -1, -1)
+
+
+def find_adapters(read: seq, qual: str) -> ParsedBCRead:
+    phase_block_length_to_seqs = {
+        0: [s''], # Handle special
+        1: [s'A'],
+        2: [s'CG'],
+        3: [s'GCC'],
+        4: [s'AGC', s'CGC', s'GGC'] # Should match: NVGC (skip first nucleotide)
+    }
+
+    for phase_block_length in [0, 1, 2, 3, 4]:
+        adapter1_start = bc1_length + phase_block_length
+        adapter1_end = adapter1_start + adapter1_const_length
+        adapter1_seq_kmer = adapter1_const_kmer_type(
+            read[adapter1_start:adapter1_end]
+        )
+
+        adapter2_start = adapter1_end + bc2_length
+        adapter2_end = adapter2_start + adapter2_const_length
+        adapter2_seq_kmer = adapter2_const_kmer_type(
+            read[adapter2_start:adapter2_end]
+        )
+
+        adapter1_hamming_dist = abs(adapter1_seq_kmer - adapter1_kmer)
+        adapter2_hamming_dist = abs(adapter2_seq_kmer - adapter2_kmer)
+
+        phase_block_seq_from_read = s'NNNN'
+
+        if adapter1_hamming_dist <= 2 and adapter2_hamming_dist <= 2:
+            if phase_block_length > 0:
+                for phase_block_seq in phase_block_length_to_seqs[phase_block_length]:
+                    if phase_block_length == 4:
+                        # Skip first N of phase block sequence.
+                        phase_block_seq_from_read = read[bc1_length + 1:bc1_length + 4]  
+                    else:
+                        phase_block_seq_from_read = read[bc1_length:bc1_length + phase_block_length]  
+
+                    if phase_block_seq == phase_block_seq_from_read:
+                        # Collect BC1, BC2, BC3 sequences and associated quality scores.
+                        bc_parts_raw = BC_parts_raw(
+                             BC_part_raw(
+                                 read[0:bc1_length],
+                                 qual[0:bc1_length]
+                             ),
+                             BC_part_raw(
+                                 read[adapter1_end:adapter1_end + bc2_length],
+                                 qual[adapter1_end:adapter1_end + bc2_length]
+                             ),
+                             BC_part_raw(
+                                 read[adapter2_end:adapter2_end + bc3_length],
+                                 qual[adapter2_end:adapter2_end + bc3_length]
+                             )
+                        )
+
+                        return ParsedBCRead(
+                            True,
+                            bc_parts_raw,
+                            phase_block_seq,
+                            phase_block_length,
+                            adapter1_hamming_dist,
+                            adapter2_hamming_dist
+                        )
+            else:
+                # Collect BC1, BC2, BC3 sequences and associated quality scores.
+                bc_parts_raw = BC_parts_raw(
+                     BC_part_raw(
+                         read[0:bc1_length],
+                         qual[0:bc1_length]
+                     ),
+                     BC_part_raw(
+                         read[adapter1_end:adapter1_end + bc2_length],
+                         qual[adapter1_end:adapter1_end + bc2_length]
+                     ),
+                     BC_part_raw(
+                         read[adapter2_end:adapter2_end + bc3_length],
+                         qual[adapter2_end:adapter2_end + bc3_length]
+                     )
+                )
+
+                return ParsedBCRead(
+                    True,
+                    bc_parts_raw,
+                    s'',
+                    phase_block_length,
+                    adapter1_hamming_dist,
+                    adapter2_hamming_dist
+                )
+
+    return not_found_adapters
+
+
+
+def neighbors(kmer: K):
+    """
+    Create kmers with hamming distance of 1.
+    """
+
+    for i in range(len(kmer)):
+        for b in (k'A', k'C', k'G', k'T'):
+            if kmer[i] != b:
+                yield kmer |> base(i, b)
+
+
+type CorrectedBc(mismatch_dist: int, corrected_bc: str)
+
+
+def correct_bc_with_whitelist(bc_whitelist: set[K], bc: K) -> CorrectedBc:
+    """
+    Check if provided barcode matches the whitelist (0 or 1 mismatch allowed).
+    """
+
+    if bc in bc_whitelist:
+        # Exact match.
+        return CorrectedBc(0, str(bc))
+    for neighbor in neighbors(bc):
+        if neighbor in bc_whitelist:
+            # Hamming neighbor in whitelist (distance = 1).
+            return CorrectedBc(1, str(neighbor))
+
+    # No match.
+    return CorrectedBc(-1, str(bc))
+
+
+
+type Barcodes(bc1_hamming_dist: int, bc2_hamming_dist: int, bc3_hamming_dist: int, bc1: seq, bc2: seq, bc3: seq)
+
+
+
+def extract_and_correct_biorad_barcode_in_fastq(fastq_with_raw_bc_filename: str, fastq_with_corrected_bc_filename: str, corrected_bc_stats_tsv_filename: str):
+    """
+    Read FASTQ file with barcodes and append " CB:Z:corrected_barcode" to the FASTQ record comment
+    if the barcode matches the whitelist (exact match or 1 mismatch).
+    """
+
+    if fastq_with_corrected_bc_filename == '-':
+        fastq_with_corrected_bc_filename = '/dev/stdout'
+
+
+    nbr_reads = 0
+    nbr_reads_with_adapters_needed_to_find_bcs = 0
+
+    # Keep track of number of reads that have a barcode part with >1 , 0 or 1 mismatch. 
+    nbr_reads_with_bcs = [
+        # Barcode 1: more than 1 mismatch, 0 mismatches, 1 mismatch.
+        [0, 0, 0],
+        # Barcode 2: more than 1 mismatch, 0 mismatches, 1 mismatch.
+        [0, 0, 0],
+        # Barcode 3: more than 1 mismatch, 0 mismatches, 1 mismatch.
+        [0, 0, 0],
+    ]
+
+    nbr_reads_with_bc1_bc2_bc3_correct_or_correctable = 0
+
+
+    with open(fastq_with_corrected_bc_filename, 'w') as fastq_with_corrected_bc_fh:
+        for record in FASTQ(fastq_with_raw_bc_filename, gzip=True, validate=False, copy=True):
+            nbr_reads += 1
+
+            parsed_bc_read = find_adapters(record.seq, record.qual)
+
+            if parsed_bc_read.found_adapters == False:
+                # Add Biorad tag "br:Z:FoundNoAdapters" to read name comment and write raw barcode of Ns.
+                fastq_with_corrected_bc_fh.write(f'@{record.name} br:Z:FoundNoAdapters\nNNNNNNNNNNNNNNNNNNNNN\n+\nAAAAAAAAAAAAAAAAAAAAA\n')
+            else:
+                nbr_reads_with_adapters_needed_to_find_bcs += 1
+
+                # Get raw barcodes.
+                bc1_kmer = Kmer[7](parsed_bc_read.bc_parts_raw.bc1_raw.seq)
+                bc2_kmer = Kmer[7](parsed_bc_read.bc_parts_raw.bc2_raw.seq)
+                bc3_kmer = Kmer[7](parsed_bc_read.bc_parts_raw.bc3_raw.seq)
+
+                corrected_bc1 = correct_bc_with_whitelist(barcode_kmers, bc1_kmer)
+                corrected_bc2 = correct_bc_with_whitelist(barcode_kmers, bc2_kmer)
+                corrected_bc3 = correct_bc_with_whitelist(barcode_kmers, bc3_kmer)
+
+                # Collect statistics of barcode mismatches for each part of the barcode.
+                # As more than 1 mismatch is indicated by -1, we put that one in index 0.
+                nbr_reads_with_bcs[0][corrected_bc1.mismatch_dist + 1] += 1
+                nbr_reads_with_bcs[1][corrected_bc2.mismatch_dist + 1] += 1
+                nbr_reads_with_bcs[2][corrected_bc3.mismatch_dist + 1] += 1
+
+                if corrected_bc1.mismatch_dist == -1 or corrected_bc2.mismatch_dist == -1 or corrected_bc3.mismatch_dist == -1:
+                    # At least one of the barcode parts could not be corrected.
+                    # Add Biorad tag "br:Z:" to read name comment with number of mismatches for each barcode part.
+                    fastq_with_corrected_bc_fh.write(f'@{record.name} br:Z:{corrected_bc1.mismatch_dist},{corrected_bc2.mismatch_dist},{corrected_bc3.mismatch_dist}\n{parsed_bc_read.bc_full_seq()}\n+\n{parsed_bc_read.bc_full_qual()}\n')
+                else:
+                    nbr_reads_with_bc1_bc2_bc3_correct_or_correctable += 1
+
+                    # Write the corrected barcode as CB tag in the FASTQ comment.
+                    # Add Biorad tag "br:Z:" to read name comment with number of mismatches for each barcode part.
+                    fastq_with_corrected_bc_fh.write(f'@{record.name} CB:Z:{corrected_bc1.corrected_bc}{corrected_bc2.corrected_bc}{corrected_bc3.corrected_bc}\tbr:Z:{corrected_bc1.mismatch_dist},{corrected_bc2.mismatch_dist},{corrected_bc3.mismatch_dist}\n{parsed_bc_read.bc_full_seq()}\n+\n{parsed_bc_read.bc_full_qual()}\n')
+
+    with open(corrected_bc_stats_tsv_filename, 'w') as corrected_bc_stats_tsv_fh:
+        corrected_bc_stats_tsv_fh.write(
+            f'nbr_reads:\t{nbr_reads}\n' \
+            f'nbr_reads_with_adapters_needed_to_find_bcs\t{nbr_reads_with_adapters_needed_to_find_bcs}\n' \
+            f'nbr_reads_with_bc1_0_mismatches\t\t{nbr_reads_with_bcs[0][1]}\n' \
+            f'nbr_reads_with_bc1_1_mismatch\t\t{nbr_reads_with_bcs[0][2]}\n' \
+            f'nbr_reads_with_bc1_uncorrectable\t\t{nbr_reads_with_bcs[0][0]}\n' \
+            f'nbr_reads_with_bc2_0_mismatches\t\t{nbr_reads_with_bcs[1][1]}\n' \
+            f'nbr_reads_with_bc2_1_mismatch\t\t{nbr_reads_with_bcs[1][2]}\n' \
+            f'nbr_reads_with_bc2_uncorrectable\t\t{nbr_reads_with_bcs[1][0]}\n' \
+            f'nbr_reads_with_bc3_0_mismatches\t\t{nbr_reads_with_bcs[2][1]}\n' \
+            f'nbr_reads_with_bc3_1_mismatch\t\t{nbr_reads_with_bcs[2][2]}\n' \
+            f'nbr_reads_with_bc3_uncorrectable\t\t{nbr_reads_with_bcs[2][0]}\n' \
+            f'nbr_reads_with_bc1_bc2_bc3_correct_or_correctable\t{nbr_reads_with_bc1_bc2_bc3_correct_or_correctable}\n'
+       )
+
+
+
+if len(sys.argv) <= 3:
+    sys.stderr.write(f'Usage: {sys.argv[0]} fastq_with_raw_bc_file fastq_with_corrected_bc_file corrected_bc_stats_file\n')
+    sys.exit(1)
+else:
+    fastq_with_raw_bc_filename = sys.argv[1]
+    fastq_with_corrected_bc_filename = sys.argv[2]
+    corrected_bc_stats_tsv_filename = sys.argv[3]
+
+    # Read FASTQ with barcodes and write a FASTQ with corrected barcodes for barcodes that
+    # match the whitelist of barcodes closely enough, else write the original barcodes.
+    extract_and_correct_biorad_barcode_in_fastq(fastq_with_raw_bc_filename, fastq_with_corrected_bc_filename, corrected_bc_stats_tsv_filename)
