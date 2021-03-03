@@ -42,13 +42,13 @@ barcode_10x_scatac_fastqs () {
         printf '        <interleaved [true|false]> \\\n';
         printf '        <add_barcode_in_comment [true|false]> \\\n';
         printf '        <barcode_tags_or_separator> \\\n';
-        printf '        <compress_fastq_cmd [bgzip|pigz|gzip|stdout|-]> \\\n\n';
+        printf '        <compress_fastq_cmd [bgzip|pigz|gzip|stdout|-|uncompressed]> \\\n\n';
         printf 'Purpose: Barcode 10x scATAC FASTQ files by adding the cell barcode from R2 to each\n';
         printf '         read in R1 and R3, as a comment or in front of the original read name.\n\n';
         printf 'Parameters:\n';
-        printf '  - fastq_R1:   FASTQ R1 fileanme (uncompressed or gzipped).\n';
-        printf '  - fastq_R2:   FASTQ R2 fileanme with barcodes (uncompressed or gzipped).\n';
-        printf '  - fastq_R3:   FASTQ R3 fileanme (uncompressed or gzipped).\n';
+        printf '  - fastq_R1:   FASTQ R1 filename (uncompressed or gzipped).\n';
+        printf '  - fastq_R2:   FASTQ R2 filename with barcodes (uncompressed or gzipped).\n';
+        printf '  - fastq_R3:   FASTQ R3 filename (uncompressed or gzipped).\n';
         printf '  - fastq_output_prefix: Output prefix for FASTQ output file(s).\n';
         printf '  - interleaved:\n';
         printf '      - true:   Write one output FASTQ file with reads from R1 and R3 interleaved (default).\n';
@@ -71,10 +71,11 @@ barcode_10x_scatac_fastqs () {
         printf "          - \"gzip\":   '%s'\n" "${compress_fastq_gzip_cmd}";
         printf '          - "stdout":  Write uncompressed output to stdout.\n';
         printf '          - "-":       Write uncompressed output to stdout.\n';
+        printf '          - "uncompressed":  Write uncompressed FASTQ files.\n';
         printf '          - full custom command\n\n';
         printf '        To change number of compression threads:\n';
         printf '          - export compress_fastq_threads="%s"\n\n' "${compress_fastq_threads}";
-        printf '        To change comprssion level:\n';
+        printf '        To change compression level:\n';
         printf '          - export compress_fastq_level="%s"\n\n' "${compress_fastq_level}";
         return 1;
     fi
@@ -152,8 +153,13 @@ barcode_10x_scatac_fastqs () {
             local compress_fastq_cmd="${compress_fastq_gzip_cmd}";;
         stdout|-)
             # Write interleaved FASTQ files when writing to stdout.
-            local fastq_R1_output_filename='/dev/stdout';
-            local fastq_R2_output_filename='/dev/stdout';
+            fastq_R1_output_filename='/dev/stdout';
+            fastq_R2_output_filename='/dev/stdout';
+            local compress_fastq_cmd="cat";;
+        uncompressed)
+            # Write uncompressed FASTQ files.
+            fastq_R1_output_filename="${fastq_R1_output_filename%.gz}";
+            fastq_R2_output_filename="${fastq_R2_output_filename%.gz}";
             local compress_fastq_cmd="cat";;
     esac
 
