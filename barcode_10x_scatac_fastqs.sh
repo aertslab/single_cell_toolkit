@@ -277,6 +277,13 @@ barcode_10x_scatac_fastqs () {
                 }
             }
         }
+
+        # Close open file handles.
+        close(read_fastq_R1_cmd);
+        close(read_fastq_R2_cmd);
+        close(read_fastq_R3_cmd);
+        close(write_fastq_R1_cmd);
+        close(write_fastq_R2_cmd);
     }'
 
     return $?
