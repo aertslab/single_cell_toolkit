@@ -226,8 +226,8 @@ barcode_10x_scatac_fastqs () {
                         }
 
                         # Check if read names match between all 3 FASTQ files.
-                        if ( read_name_R1 == read_name_R2 == read_name_R3 ) {
-                            print "Error: Read name R1 (\"" read_name_R1 "\"), read name R2 (\"" read_name_R2 "\") and R3 (\"" read_name_R3 "\") are not paired properly (line number: " fastq_line_number ")." 
+                        if ( read_name_R1 != read_name_R2 || read_name_R1 != read_name_R3 ) {
+                            print "Error: Read name R1 (\"" read_name_R1 "\"), read name R2 (\"" read_name_R2 "\") and R3 (\"" read_name_R3 "\") are not paired properly (line number: " fastq_line_number ").";
                             exit(1);
                         }
 
