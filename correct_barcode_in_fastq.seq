@@ -23,7 +23,7 @@ def read_barcode_whitelist_from_file[K](bc_whitelist_filename: str):
 
             bc = K(seq(bc_str))
             bc_whitelist.add(bc)
-  
+
     return bc_whitelist
 
 
