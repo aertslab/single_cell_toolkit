@@ -28,9 +28,9 @@ barcode_10x_scatac_fastqs () {
     local fastq_R2_filename="${2}";
     local fastq_R3_filename="${3}";
     local fastq_output_prefix="${4}";
-    local interleaved="${5:-true}";
+    local interleaved="${5:-false}";
     local add_barcode_in_comment="${6:-true}";
-    local compress_fastq_cmd="${8:-bgzip}";
+    local compress_fastq_cmd="${8:-pigz}";
 
     if [ ${#@} -lt 4 ] ; then
         printf '\nUsage:\n';
@@ -51,8 +51,8 @@ barcode_10x_scatac_fastqs () {
         printf '  - fastq_R3:   FASTQ R3 filename (uncompressed or gzipped).\n';
         printf '  - fastq_output_prefix: Output prefix for FASTQ output file(s).\n';
         printf '  - interleaved:\n';
-        printf '      - true:   Write one output FASTQ file with reads from R1 and R3 interleaved (default).\n';
-        printf '      - false:  Write R1 and R2 output FASTQ file with reads from R1 and R3 respectively.\n';
+        printf '      - true:   Write one output FASTQ file with reads from R1 and R3 interleaved.\n';
+        printf '      - false:  Write R1 and R2 output FASTQ file with reads from R1 and R3 respectively (default).\n';
         printf '  - add_barcode_in_comment:\n';
         printf '      - true:   Add barcode and barcode quality from R2 as read comment in SAM spec format\n';
         printf '                (for usage wtih: "bwa -C") (default).\n';
@@ -66,8 +66,8 @@ barcode_10x_scatac_fastqs () {
         printf '          (default: "-").\n';
         printf '  - compress_fastq_cmd:\n';
         printf '      - Compression program to use for output FASTQ files:\n';
-        printf "          - \"bgzip\":  '%s'  (default)\n" "${compress_fastq_bgzip_cmd}";
-        printf "          - \"pigz\":   '%s'\n" "${compress_fastq_pigz_cmd}";
+        printf "          - \"bgzip\":  '%s'\n" "${compress_fastq_bgzip_cmd}";
+        printf "          - \"pigz\":   '%s'  (default)\n" "${compress_fastq_pigz_cmd}";
         printf "          - \"gzip\":   '%s'\n" "${compress_fastq_gzip_cmd}";
         printf '          - "stdout":  Write uncompressed output to stdout.\n';
         printf '          - "-":       Write uncompressed output to stdout.\n';

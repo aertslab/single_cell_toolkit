@@ -28,8 +28,8 @@ extract_and_correct_biorad_barcode_in_fastq () {
     local fastq_R1_filename="${1}";
     local fastq_R2_filename="${2}";
     local fastq_output_prefix="${3}";
-    local interleaved="${4:-true}";
-    local compress_fastq_cmd="${5:-bgzip}";
+    local interleaved="${4:-false}";
+    local compress_fastq_cmd="${5:-pigz}";
 
     if [ ${#@} -lt 3 ] ; then
         printf '\nUsage:\n';
@@ -47,12 +47,12 @@ extract_and_correct_biorad_barcode_in_fastq () {
         printf '  - fastq_R2:   BioRad v2.1 FASTQ R2 filename (uncompressed or gzipped).\n';
         printf '  - fastq_output_prefix: Output prefix for FASTQ output file(s).\n';
         printf '  - interleaved:\n';
-        printf '      - true:   Write one output FASTQ file with reads from R1 and R3 interleaved (default).\n';
-        printf '      - false:  Write R1 and R2 output FASTQ file with reads from R1 and R3 respectively.\n';
+        printf '      - true:   Write one output FASTQ file with reads from R1 and R3 interleaved.\n';
+        printf '      - false:  Write R1 and R2 output FASTQ file with reads from R1 and R3 respectively (default).\n';
         printf '  - compress_fastq_cmd:\n';
         printf '      - Compression program to use for output FASTQ files:\n';
-        printf "          - \"bgzip\":  '%s'  (default)\n" "${compress_fastq_bgzip_cmd}";
-        printf "          - \"pigz\":   '%s'\n" "${compress_fastq_pigz_cmd}";
+        printf "          - \"bgzip\":  '%s'\n" "${compress_fastq_bgzip_cmd}";
+        printf "          - \"pigz\":   '%s'  (default)\n" "${compress_fastq_pigz_cmd}";
         printf "          - \"gzip\":   '%s'\n" "${compress_fastq_gzip_cmd}";
         printf '          - "stdout":  Write uncompressed output to stdout.\n';
         printf '          - "-":       Write uncompressed output to stdout.\n';
