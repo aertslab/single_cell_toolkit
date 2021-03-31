@@ -57,6 +57,9 @@ args = parser.parse_args()
 
 percentages = [float(x) for x in args.percentages.split(",")]
 
+print(f"Calculating saturation curves for 10x {args.type} data...")
+print(f"10x folder used: {args.dir}")
+
 if not os.path.isdir(args.output):
     # print(f"{args.output} does not exist. Creating...", file=sys.stderr)
     os.mkdir(args.output)
@@ -340,7 +343,7 @@ if args.type == "ATAC":
     project_name = complexity_info_path_stripping[-1]
 
     plt.savefig(
-        args.output + "/" + project_name + "_complexity.png",
+        Path(args.output) / f"{project_name}_complexity.png",
         dpi=350,
         bbox_inches="tight",
         pad_inches=0,
@@ -349,7 +352,7 @@ if args.type == "ATAC":
 elif args.type == "RNA":
     project_name = "RNA"  # needs to be updated
     plt.savefig(
-        args.output + "/" + project_name + "_saturation.png",
+        ath(args.output) / f"{project_name}_saturation.png",
         dpi=350,
         bbox_inches="tight",
         pad_inches=0,
@@ -378,6 +381,8 @@ reads_summary = reads_summary.sort_values(
 )
 # save summary
 if args.type == "ATAC":
-    reads_summary.to_csv(args.output + "/" + project_name + "_complexity.tsv", sep="\t")
+    reads_summary.to_csv(Path(args.output) / f"{project_name}_complexity.tsv", sep="\t")
 elif args.type == "RNA":
-    reads_summary.to_csv(args.output + "/" + project_name + "_saturation.tsv", sep="\t")
+    reads_summary.to_csv(Path(args.output) / f"{project_name}_saturation.tsv", sep="\t")
+
+print(f"Done.")
