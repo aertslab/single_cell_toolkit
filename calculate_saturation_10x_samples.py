@@ -34,6 +34,7 @@ import json
 import pandas as pd
 from scipy.optimize import curve_fit
 from uncertainties import ufloat
+from pathlib import Path
 import matplotlib.pylab as plt
 import numpy as np
 
@@ -60,41 +61,85 @@ if not os.path.isdir(args.output):
     # print(f"{args.output} does not exist. Creating...", file=sys.stderr)
     os.mkdir(args.output)
 
-# get location of json file
-if args.type == "ATAC":
-    path = args.dir
-    complexity_info = "/SC_ATAC_COUNTER_CS/SC_ATAC_COUNTER/_SC_ATAC_METRIC_COLLECTOR/ESTIMATE_LIBRARY_COMPLEXITY/fork0"
-    path_use = path + complexity_info
 
-    a = os.scandir(path_use)
-    file_path = [x.name for x in a if x.name.startswith("join-")]
-    complexity_info_file = (
-        path
-        + "/SC_ATAC_COUNTER_CS/SC_ATAC_COUNTER/_SC_ATAC_METRIC_COLLECTOR/ESTIMATE_LIBRARY_COMPLEXITY/fork0/"
-        + file_path[0]
-        + "/files/singlecell_complexity.json"
+if args.type == "ATAC":
+    complexity_info_dir = (
+        Path(args.dir)
+        / "SC_ATAC_COUNTER_CS"
+        / "SC_ATAC_COUNTER"
+        / "_SC_ATAC_METRIC_COLLECTOR"
+        / "ESTIMATE_LIBRARY_COMPLEXITY"
+        / "fork0"
     )
-    summary_info = "/outs/summary.csv"
-    summary = pd.read_csv(path + summary_info)
-    ncells = np.int(summary["annotated_cells"])
+    if not complexity_info_dir.exists():
+        raise FileNotFoundError(
+            f"The given 10x {args.type} folder {args.dir} does not exits."
+        )
+
+    a = os.scandir(path=complexity_info_dir)
+    file_path = [x.name for x in a if x.name.startswith("join-")]
+    complexity_info_path = (
+        Path(args.dir)
+        / "SC_ATAC_COUNTER_CS"
+        / "SC_ATAC_COUNTER"
+        / "_SC_ATAC_METRIC_COLLECTOR"
+        / "ESTIMATE_LIBRARY_COMPLEXITY"
+        / "fork0"
+        / file_path[0]
+        / "files"
+        / "singlecell_complexity.json"
+    )
+    if not complexity_info_path.exists():
+        raise FileNotFoundError(
+            f"The complexity JSON file of the given 10x {args.type} folder {args.dir} does not exist."
+        )
+
+    summary_info_path = Path(args.dir) / "outs" / "summary.csv"
+    if not summary_info_path.exists():
+        raise FileNotFoundError(
+            f"The suymmary info file of the given 10x {args.type} folder {args.dir} does not exist."
+        )
+    summary = pd.read_csv(summary_info_path)
+    num_cells = np.int(summary["annotated_cells"])
 
 elif args.type == "RNA":
     path = args.dir
-    summary_info = "/SC_RNA_COUNTER_CS/SC_RNA_COUNTER/SUMMARIZE_REPORTS/fork0/files/metrics_summary_csv.csv"
-    summary = pd.read_csv(path + summary_info)
-    ncells = summary["Estimated Number of Cells"][0]
-    ncells = np.int(re.sub(",", "", ncells))
-    complexity_info = "/SC_RNA_COUNTER_CS/SC_RNA_COUNTER/SUMMARIZE_REPORTS/fork0/files/metrics_summary_json.json"
-    complexity_info_file = path + complexity_info
+    summary_info_path = (
+        Path(args.dir)
+        / "SC_RNA_COUNTER_CS"
+        / "SC_RNA_COUNTER"
+        / "SUMMARIZE_REPORTS"
+        / "fork0"
+        / "files"
+        / "metrics_summary_csv.csv"
+    )
+    if not summary_info_path.exists():
+        raise FileNotFoundError(
+            f"The suymmary info file of the given 10x {args.type} folder {args.dir} does not exist."
+        )
+    summary = pd.read_csv(summary_info_path)
+    num_cells = summary["Estimated Number of Cells"][0]
+    num_cells = np.int(re.sub(",", "", num_cells))
+    complexity_info_path = (
+        Path(args.dir)
+        / "SC_RNA_COUNTER_CS"
+        / "SC_RNA_COUNTER"
+        / "SUMMARIZE_REPORTS"
+        / "fork0"
+        / "files"
+        / "metrics_summary_json.json"
+    )
 
-# open json file
-with open(complexity_info_file) as json_file:
-    data = json.load(json_file)
-test = pd.DataFrame(data)
+# Open complexity file
+with open(complexity_info_path) as complexity_info_fh:
+    complexity_info = json.load(complexity_info_fh)
+complexity_info_df = pd.DataFrame(complexity_info)
 
 if args.type == "RNA":
-    subsampled_columns = [x for x in test.columns if "multi_raw_rpc_" in x]
-    saturation_data = test[subsampled_columns].copy()
+    subsampled_columns = [
+        x for x in complexity_info_df.columns if "multi_raw_rpc_" in x
+    ]
+    saturation_data = complexity_info_df[subsampled_columns].copy()
     saturation_data = pd.DataFrame(saturation_data.max())
     saturation_data.index = [
         np.float(
@@ -122,9 +167,9 @@ def MM(x, Vmax, Km):
 # get x/y data
 if args.type == "ATAC":
     # get x data
-    x_data = np.array(test["total_depth"])
+    x_data = np.array(complexity_info_df["total_depth"])
     # get y data
-    y_data = np.array(test["unique"])
+    y_data = np.array(complexity_info_df["unique"])
 elif args.type == "RNA":
     # get x data
     x_data = np.array(saturation_data[0])
