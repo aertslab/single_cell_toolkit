@@ -100,7 +100,7 @@ if args.type == "ATAC":
             f"The suymmary info file of the given 10x {args.type} folder {args.dir} does not exist."
         )
     summary = pd.read_csv(summary_info_path)
-    num_cells = np.int(summary["annotated_cells"])
+    num_cells = int(summary["annotated_cells"])
 
 elif args.type == "RNA":
     path = args.dir
@@ -119,7 +119,7 @@ elif args.type == "RNA":
         )
     summary = pd.read_csv(summary_info_path)
     num_cells = summary["Estimated Number of Cells"][0]
-    num_cells = np.int(re.sub(",", "", num_cells))
+    num_cells = int(re.sub(",", "", num_cells))
     complexity_info_path = (
         Path(args.dir)
         / "SC_RNA_COUNTER_CS"
@@ -198,9 +198,9 @@ plt.figure(figsize=(10, 7))
 # plotting the model
 
 if args.type == "ATAC":
-    x_fit = np.linspace(0, np.int(np.max(x_data) * 100), 100000)
+    x_fit = np.linspace(0, int(np.max(x_data) * 100), 100000)
 elif args.type == "RNA":
-    x_fit = np.linspace(0, np.int(np.max(x_data) * 2000), 100000)
+    x_fit = np.linspace(0, int(np.max(x_data) * 2000), 100000)
 y_fit = MM(x_fit, *(best_fit_ab))
 
 # get max value possible and highest we want to plot
@@ -239,7 +239,7 @@ def drawline(
     y_max = best_fit_ab[0]
     if assay_type == "ATAC":
         y_val = y_max * perc
-        y_val = np.int(y_val)
+        y_val = int(y_val)
     elif assay_type == "RNA":
         y_val = perc
         y_val = np.float(y_val)
@@ -272,7 +272,7 @@ for perc in percentages:
     plt.text(
         x=0.6 * x_max,
         y=perc * best_fit_ab[0],
-        s=str(np.int(perc * 100)) + "% = " + str(np.int(x_coef)) + " reads",
+        s=str(int(perc * 100)) + "% = " + str(int(x_coef)) + " reads",
         ha="left",
         fontsize=18,
         wrap=True,
@@ -293,7 +293,7 @@ reads_needed["now"] = x_coef
 plt.text(
     x=0.6 * x_max,
     y=perc * best_fit_ab[0],
-    s=str(np.int(perc * 100)) + "% = " + str(np.int(x_coef)) + " reads",
+    s=str(int(perc * 100)) + "% = " + str(int(x_coef)) + " reads",
     ha="left",
     fontsize=18,
     wrap=True,
@@ -302,7 +302,7 @@ plt.text(
 plt.text(
     x=0.6 * x_max,
     y=perc * best_fit_ab[0],
-    s=str(np.int(perc * 100)) + "% = " + str(np.int(x_coef)) + " reads",
+    s=str(int(perc * 100)) + "% = " + str(int(x_coef)) + " reads",
     ha="left",
     fontsize=18,
     wrap=True,
@@ -310,9 +310,9 @@ plt.text(
 
 # update summary
 reads_needed["num_cells"] = num_cells
-reads_needed["saturation"] = np.int(perc * 100)
+reads_needed["saturation"] = int(perc * 100)
 reads_needed["med_uniq_frag_per_cell"] = perc * best_fit_ab[0]
-reads_needed["mean_read_per_cell"] = np.int(x_coef)
+reads_needed["mean_read_per_cell"] = int(x_coef)
 reads_summary.append(reads_needed)
 ######################################################################
 
