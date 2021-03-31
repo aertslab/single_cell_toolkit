@@ -309,7 +309,7 @@ plt.text(
 )
 
 # update summary
-reads_needed["ncells"] = ncells
+reads_needed["num_cells"] = num_cells
 reads_needed["saturation"] = np.int(perc * 100)
 reads_needed["med_uniq_frag_per_cell"] = perc * best_fit_ab[0]
 reads_needed["mean_read_per_cell"] = np.int(x_coef)
@@ -360,9 +360,9 @@ elif args.type == "RNA":
 reads_summary = pd.DataFrame(reads_summary)
 # from mean reads/cell to total reads
 for perc in percentages:
-    reads_summary[perc] = reads_summary[perc] * reads_summary["ncells"]
+    reads_summary[perc] = reads_summary[perc] * reads_summary["num_cells"]
 
-reads_summary["now"] = reads_summary["now"] * reads_summary["ncells"]
+reads_summary["now"] = reads_summary["now"] * reads_summary["num_cells"]
 # calculate additional reads needed
 for perc in percentages:
     reads_summary[f"extra_needed_for_{perc * 100:.2f}"] = (
