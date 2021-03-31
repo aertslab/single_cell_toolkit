@@ -333,11 +333,11 @@ elif args.type == "RNA":
     plt.xlim([0, x_max])
 
 if args.type == "ATAC":
-    complexity_info_file_stripping = re.sub(
-        "/SC_ATAC_COUNTER_.*", "", complexity_info_file
+    complexity_info_path_stripping = re.sub(
+        "/SC_ATAC_COUNTER_.*", "", str(complexity_info_path)
     )
-    complexity_info_file_stripping = re.split("/", complexity_info_file_stripping)
-    project_name = complexity_info_file_stripping[-1]
+    complexity_info_path_stripping = re.split("/", complexity_info_path_stripping)
+    project_name = complexity_info_path_stripping[-1]
 
     plt.savefig(
         args.output + "/" + project_name + "_complexity.png",
