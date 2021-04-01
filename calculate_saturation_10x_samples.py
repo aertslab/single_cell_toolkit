@@ -279,54 +279,61 @@ def plot_saturation_curve(
 
 
 def main():
-    f"""
-    calculate_saturation.py ({__version__}): 
-        Infer saturation of 10x scATAC/scRNA sample
-
-        Requirements:
-            - Python 3
-            - Packages: pandas, numpy, scipy, matplotlib, uncertainties, argparse
-
-        How to run:
-            - Example:
-                python calculate_saturation.py \
-                    --dir 10X_dir \
-                    --type RNA \
-                    --o output_dir
-        Input:
-            - Output folder from CellRanger (tested with 3.1.0)
-
-        Output:
-            - 1 png with saturation/complexity curve
-            - 1 tsv with summary of reads and additional reads needed for 50/75%
-    """
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-d", "--dir", help="10x folder", required=True)
-    parser.add_argument("-t", "--type", help="RNA/ATAC", required=True)
-    parser.add_argument("-o", "--output", help="path to output", required=True)
+    parser = argparse.ArgumentParser(
+        description='Infer saturation of 10x scATAC/scRNA sample.'
+    )
     parser.add_argument(
-        "--percentages",
-        metavar="percentages",
+        '-d', '--dir',
+        dest='tenx_dir',
+        action='store',
         type=str,
-        help="Comma separated list of decimal percentages to predict",
-        default="0.5,0.75",
+        required=True,
+        help='10x CellRanger/CellRangerATAC output folder.'
+    )
+    parser.add_argument(
+        '-t', '--type',
+        dest='assay_type',
+        action='store',
+        type=str,
+        required=True,
+        choices=['RNA', 'ATAC'],
+        help='Assay type: RNA/ATAC.'
+    )
+    parser.add_argument(
+        '-o', '--output',
+        dest='output',
+        action='store',
+        type=str,
+        required=True,
+        help='Output dir, which will contain PNG file with saturation/complexity curve and TSV file with summary of '
+             'reads and additional reads needed to reach saturation/complexity specified by percentages.'
+    )
+    parser.add_argument(
+        '--percentages',
+        dest='percentages',
+        type=str,
+        help='Comma separated list of decimal percentages to predict. Default: "0.5,0.75"',
+        default='0.5,0.75',
+    )
+    parser.add_argument(
+        '--version',
+        action='version',
+        version=f'{__version__}'
     )
 
     args = parser.parse_args()
 
     percentages = [float(x) for x in args.percentages.split(",")]
 
-    print(f"Calculating saturation curves for 10x {args.type} data...")
-    print(f"10x folder used: {args.dir}")
+    print(f"Calculating saturation curves for 10x {args.assay_type} data...")
+    print(f"10x folder used: {args.tenx_dir}")
 
     if not os.path.isdir(args.output):
-        # print(f"{args.output} does not exist. Creating...", file=sys.stderr)
         os.mkdir(args.output)
 
-    if args.type == "ATAC":
+    if args.assay_type == "ATAC":
         complexity_info_dir = (
-                Path(args.dir)
+                Path(args.tenx_dir)
                 / "SC_ATAC_COUNTER_CS"
                 / "SC_ATAC_COUNTER"
                 / "_SC_ATAC_METRIC_COLLECTOR"
@@ -335,13 +342,13 @@ def main():
         )
         if not complexity_info_dir.exists():
             raise FileNotFoundError(
-                f"The given 10x {args.type} folder {args.dir} does not exits."
+                f"The given 10x {args.assay_type} folder {args.tenx_dir} does not exits."
             )
 
         a = os.scandir(path=complexity_info_dir)
         file_path = [x.name for x in a if x.name.startswith("join-")]
         complexity_info_path = (
-                Path(args.dir)
+                Path(args.tenx_dir)
                 / "SC_ATAC_COUNTER_CS"
                 / "SC_ATAC_COUNTER"
                 / "_SC_ATAC_METRIC_COLLECTOR"
@@ -353,21 +360,28 @@ def main():
         )
         if not complexity_info_path.exists():
             raise FileNotFoundError(
-                f"The complexity JSON file of the given 10x {args.type} folder {args.dir} does not exist."
+                f"The complexity JSON file of the given 10x {args.assay_type} folder {args.tenx_dir} does not exist."
             )
 
-        summary_info_path = Path(args.dir) / "outs" / "summary.csv"
+        summary_info_path = Path(args.tenx_dir) / "outs" / "summary.csv"
         if not summary_info_path.exists():
             raise FileNotFoundError(
-                f"The suymmary info file of the given 10x {args.type} folder {args.dir} does not exist."
+                f"The summary info file of the given 10x {args.assay_type} folder {args.tenx_dir} does not exist."
             )
         summary = pd.read_csv(summary_info_path)
         num_cells = int(summary["annotated_cells"])
 
-    elif args.type == "RNA":
-        path = args.dir
+        # Create output path.
+        complexity_info_path_stripping = re.sub(
+            "/SC_ATAC_COUNTER_.*", "", str(complexity_info_path)
+        )
+        complexity_info_path_stripping = re.split("/", complexity_info_path_stripping)
+        project_name = complexity_info_path_stripping[-1]
+        output_path = Path(args.output) / f"{project_name}_complexity.png"
+
+    elif args.assay_type == "RNA":
         summary_info_path = (
-                Path(args.dir)
+                Path(args.tenx_dir)
                 / "SC_RNA_COUNTER_CS"
                 / "SC_RNA_COUNTER"
                 / "SUMMARIZE_REPORTS"
@@ -377,13 +391,12 @@ def main():
         )
         if not summary_info_path.exists():
             raise FileNotFoundError(
-                f"The suymmary info file of the given 10x {args.type} folder {args.dir} does not exist."
+                f"The summary info file of the given 10x {args.assay_type} folder {args.tenx_dir} does not exist."
             )
         summary = pd.read_csv(summary_info_path)
-        num_cells = summary["Estimated Number of Cells"][0]
-        num_cells = int(re.sub(",", "", num_cells))
+        num_cells = int(re.sub(",", "", summary["Estimated Number of Cells"][0]))
         complexity_info_path = (
-                Path(args.dir)
+                Path(args.tenx_dir)
                 / "SC_RNA_COUNTER_CS"
                 / "SC_RNA_COUNTER"
                 / "SUMMARIZE_REPORTS"
@@ -392,20 +405,12 @@ def main():
                 / "metrics_summary_json.json"
         )
 
-    # Create output path
-    if args.type == "ATAC":
-        complexity_info_path_stripping = re.sub(
-            "/SC_ATAC_COUNTER_.*", "", str(complexity_info_path)
-        )
-        complexity_info_path_stripping = re.split("/", complexity_info_path_stripping)
-        project_name = complexity_info_path_stripping[-1]
-        output_path = Path(args.output) / f"{project_name}_complexity.png"
-    elif args.type == "RNA":
+        # Create output path.
         project_name = "RNA"  # needs to be updated
         output_path = (Path(args.output) / f"{project_name}_saturation.png",)
 
     x_data, y_data = prepare_data(
-        complexity_info_path=complexity_info_path, assay_type=args.type
+        complexity_info_path=complexity_info_path, assay_type=args.assay_type
     )
     best_model_fit, best_model_fit_params, r_sq = fit_model(
         model=MM, x_data=x_data, y_data=y_data
@@ -417,46 +422,46 @@ def main():
         model_fit_params=best_model_fit_params,
         model_fit_r_sq=r_sq,
         x_data=x_data,
-        assay_type=args.type,
+        assay_type=args.assay_type,
         output_path=output_path,
     )
 
-
-    # Initialize summary
+    # Initialize summary.
     reads_summary = []
 
-
-    # Update summary
+    # Update summary.
     reads_needed["num_cells"] = num_cells
     reads_needed["saturation"] = int(saturation_pct * 100)
     reads_needed["med_uniq_frag_per_cell"] = saturation_pct * best_model_fit[0]
     reads_needed["mean_read_per_cell"] = int(mean_reads_per_cell)
     reads_summary.append(reads_needed)
 
-    # Write summary of results
+    # Write summary of results.
     reads_summary = pd.DataFrame(reads_summary)
-    # from mean reads/cell to total reads
+
+    # From mean reads/cell to total reads.
     for perc in percentages:
         reads_summary[perc] = reads_summary[perc] * reads_summary["num_cells"]
 
     reads_summary["now"] = reads_summary["now"] * reads_summary["num_cells"]
-    # Calculate additional reads needed
+
+    # Calculate additional reads needed.
     for perc in percentages:
         reads_summary[f"extra_needed_for_{perc * 100:.2f}"] = (
             reads_summary[perc] - reads_summary["now"]
         )
         reads_summary.drop(perc, axis=1, inplace=True)
 
-
-    # Clean up
+    # Clean up.
     reads_summary = reads_summary.astype("int")
     reads_summary = reads_summary.sort_values(
         by=f"extra_needed_for_{min(percentages) * 100:.2f}", ascending=False
     )
-    # Save summary
-    if args.type == "ATAC":
+
+    # Save summary.
+    if args.assay_type == "ATAC":
         reads_summary.to_csv(Path(args.output) / f"{project_name}_complexity.tsv", sep="\t")
-    elif args.type == "RNA":
+    elif args.assay_type == "RNA":
         reads_summary.to_csv(Path(args.output) / f"{project_name}_saturation.tsv", sep="\t")
 
     print(f"Done.")
