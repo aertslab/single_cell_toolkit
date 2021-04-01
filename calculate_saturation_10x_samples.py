@@ -146,7 +146,7 @@ def plot_saturation_curve(
     model_fit_r_sq: float,
     x_data: np.array,
     y_data: np.array,
-    percentages: percentages,
+    percentages: List[float],
     assay_type: str,
     output_path: Path,
 ):
