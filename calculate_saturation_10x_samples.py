@@ -16,7 +16,7 @@ import argparse
 __author__ = "Jasper Janssens"
 __contributors__ = "Swan Floc’Hlay, Maxime De Waegeneer"
 __version__ = "v0.2.0"
-__contact__ = "jasper.janssens@kuleuven.vib.be"
+__contact__ = "jasper.janssens@kuleuven.be"
 
 f"""
 calculate_saturation.py ({__version__}): 
