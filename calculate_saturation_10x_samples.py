@@ -8,7 +8,7 @@ import json
 import pandas as pd
 from scipy.optimize import curve_fit
 from uncertainties import ufloat
-from typing import Tuple
+from typing import Tuple, List
 from pathlib import Path
 import matplotlib.pylab as plt
 import numpy as np
@@ -282,46 +282,45 @@ def plot_saturation_curve(
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Infer saturation of 10x scATAC/scRNA sample.'
+        description="Infer saturation of 10x scATAC/scRNA sample."
     )
     parser.add_argument(
-        '-d', '--dir',
-        dest='tenx_dir',
-        action='store',
+        "-d",
+        "--dir",
+        dest="tenx_dir",
+        action="store",
         type=str,
         required=True,
-        help='10x CellRanger/CellRangerATAC output folder.'
+        help="10x CellRanger/CellRangerATAC output folder.",
     )
     parser.add_argument(
-        '-t', '--type',
-        dest='assay_type',
-        action='store',
+        "-t",
+        "--type",
+        dest="assay_type",
+        action="store",
         type=str,
         required=True,
-        choices=['RNA', 'ATAC'],
-        help='Assay type: RNA/ATAC.'
+        choices=["RNA", "ATAC"],
+        help="Assay type: RNA/ATAC.",
     )
     parser.add_argument(
-        '-o', '--output',
-        dest='output',
-        action='store',
+        "-o",
+        "--output",
+        dest="output",
+        action="store",
         type=str,
         required=True,
-        help='Output dir, which will contain PNG file with saturation/complexity curve and TSV file with summary of '
-             'reads and additional reads needed to reach saturation/complexity specified by percentages.'
+        help="Output dir, which will contain PNG file with saturation/complexity curve and TSV file with summary of "
+        "reads and additional reads needed to reach saturation/complexity specified by percentages.",
     )
     parser.add_argument(
-        '--percentages',
-        dest='percentages',
+        "--percentages",
+        dest="percentages",
         type=str,
         help='Comma separated list of decimal percentages to predict. Default: "0.5,0.75"',
-        default='0.5,0.75',
+        default="0.5,0.75",
     )
-    parser.add_argument(
-        '--version',
-        action='version',
-        version=f'{__version__}'
-    )
+    parser.add_argument("--version", action="version", version=f"{__version__}")
 
     args = parser.parse_args()
 
@@ -335,12 +334,12 @@ def main():
 
     if args.assay_type == "ATAC":
         complexity_info_dir = (
-                Path(args.tenx_dir)
-                / "SC_ATAC_COUNTER_CS"
-                / "SC_ATAC_COUNTER"
-                / "_SC_ATAC_METRIC_COLLECTOR"
-                / "ESTIMATE_LIBRARY_COMPLEXITY"
-                / "fork0"
+            Path(args.tenx_dir)
+            / "SC_ATAC_COUNTER_CS"
+            / "SC_ATAC_COUNTER"
+            / "_SC_ATAC_METRIC_COLLECTOR"
+            / "ESTIMATE_LIBRARY_COMPLEXITY"
+            / "fork0"
         )
         if not complexity_info_dir.exists():
             raise FileNotFoundError(
@@ -350,15 +349,15 @@ def main():
         a = os.scandir(path=complexity_info_dir)
         file_path = [x.name for x in a if x.name.startswith("join-")]
         complexity_info_path = (
-                Path(args.tenx_dir)
-                / "SC_ATAC_COUNTER_CS"
-                / "SC_ATAC_COUNTER"
-                / "_SC_ATAC_METRIC_COLLECTOR"
-                / "ESTIMATE_LIBRARY_COMPLEXITY"
-                / "fork0"
-                / file_path[0]
-                / "files"
-                / "singlecell_complexity.json"
+            Path(args.tenx_dir)
+            / "SC_ATAC_COUNTER_CS"
+            / "SC_ATAC_COUNTER"
+            / "_SC_ATAC_METRIC_COLLECTOR"
+            / "ESTIMATE_LIBRARY_COMPLEXITY"
+            / "fork0"
+            / file_path[0]
+            / "files"
+            / "singlecell_complexity.json"
         )
         if not complexity_info_path.exists():
             raise FileNotFoundError(
@@ -383,13 +382,13 @@ def main():
 
     elif args.assay_type == "RNA":
         summary_info_path = (
-                Path(args.tenx_dir)
-                / "SC_RNA_COUNTER_CS"
-                / "SC_RNA_COUNTER"
-                / "SUMMARIZE_REPORTS"
-                / "fork0"
-                / "files"
-                / "metrics_summary_csv.csv"
+            Path(args.tenx_dir)
+            / "SC_RNA_COUNTER_CS"
+            / "SC_RNA_COUNTER"
+            / "SUMMARIZE_REPORTS"
+            / "fork0"
+            / "files"
+            / "metrics_summary_csv.csv"
         )
         if not summary_info_path.exists():
             raise FileNotFoundError(
@@ -398,13 +397,13 @@ def main():
         summary = pd.read_csv(summary_info_path)
         num_cells = int(re.sub(",", "", summary["Estimated Number of Cells"][0]))
         complexity_info_path = (
-                Path(args.tenx_dir)
-                / "SC_RNA_COUNTER_CS"
-                / "SC_RNA_COUNTER"
-                / "SUMMARIZE_REPORTS"
-                / "fork0"
-                / "files"
-                / "metrics_summary_json.json"
+            Path(args.tenx_dir)
+            / "SC_RNA_COUNTER_CS"
+            / "SC_RNA_COUNTER"
+            / "SUMMARIZE_REPORTS"
+            / "fork0"
+            / "files"
+            / "metrics_summary_json.json"
         )
 
         # Create output path.
@@ -464,9 +463,13 @@ def main():
 
     # Save summary.
     if args.assay_type == "ATAC":
-        reads_summary.to_csv(Path(args.output) / f"{project_name}_complexity.tsv", sep="\t")
+        reads_summary.to_csv(
+            Path(args.output) / f"{project_name}_complexity.tsv", sep="\t"
+        )
     elif args.assay_type == "RNA":
-        reads_summary.to_csv(Path(args.output) / f"{project_name}_saturation.tsv", sep="\t")
+        reads_summary.to_csv(
+            Path(args.output) / f"{project_name}_saturation.tsv", sep="\t"
+        )
 
     print(f"Done.")
 
