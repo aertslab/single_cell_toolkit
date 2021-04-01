@@ -145,6 +145,7 @@ def plot_saturation_curve(
     model_fit_params,
     model_fit_r_sq: float,
     x_data: np.array,
+    y_data: np.array,
     assay_type: str,
     output_path: Path,
 ):
@@ -422,6 +423,7 @@ def main():
         model_fit_params=best_model_fit_params,
         model_fit_r_sq=r_sq,
         x_data=x_data,
+        y_data=y_data,
         assay_type=args.assay_type,
         output_path=output_path,
     )
