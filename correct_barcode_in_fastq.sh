@@ -49,6 +49,7 @@ correct_barcode_in_fastq () {
             "${fastq_with_raw_bc_filename}" \
             "/dev/stdout" \
             "${fastq_with_corrected_bc_filename}.corrected.bc_stats.tsv" \
+            "${max_mismatches}" \
       | pigz -p 4 \
       > "${fastq_with_corrected_bc_filename}";
 }

@@ -73,7 +73,7 @@ def correct_bc_in_fastq(bc_whitelist: set[K], fastq_with_raw_bc_filename: str, f
         )
 
 
-if len(sys.argv) <= 4:
+if len(sys.argv) != 6:
     sys.stderr.write(f'Usage: seqc run -D bc_length={bc_length} -release {sys.argv[0]} bc_whitelist_file fastq_with_raw_bc_file fastq_with_corrected_bc_file corrected_bc_stats_file max_mismatches\n')
     sys.exit(1)
 else:
@@ -93,9 +93,9 @@ else:
     # Read FASTQ with barcodes and write a FASTQ with corrected barcodes for barcodes that
     # match the whitelist of barcodes closely enough, else write the original barcodes.
     correct_bc_in_fastq(
-        bc_whitelist,
-        fastq_with_raw_bc_filename,
-        fastq_with_corrected_bc_filename,
-        corrected_bc_stats_tsv_filename,
+        bc_whitelist=bc_whitelist,
+        fastq_with_raw_bc_filename=fastq_with_raw_bc_filename,
+        fastq_with_corrected_bc_filename=fastq_with_corrected_bc_filename,
+        corrected_bc_stats_tsv_filename=corrected_bc_stats_tsv_filename,
         max_hamming_dist=max_mismatches
     )
