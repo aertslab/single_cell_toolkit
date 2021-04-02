@@ -1,3 +1,4 @@
+from bio import *
 import sys
 
 
@@ -32,19 +33,19 @@ nexteraA_length: int = 14
 me_length: int  = 19
 me_short_length: int = 10
 
-type adapter1_kmer_type = Kmer[10]
-type adapter2_kmer_type = Kmer[10]
-type nexteraA_kmer_type = Kmer[14]
-type me_kmer_type = Kmer[19]
-type me_short_kmer_type = Kmer[10]
-type adapter1_1deletion_kmer_type = Kmer[9]
-type adapter2_1deletion_kmer_type = Kmer[9]
-type nexteraA_1deletion_kmer_type = Kmer[13]
-type me_1deletion_kmer_type = Kmer[18]
-type me_1insertion_kmer_type = Kmer[20]
+adapter1_kmer_type = Kmer[10]
+adapter2_kmer_type = Kmer[10]
+nexteraA_kmer_type = Kmer[14]
+me_kmer_type = Kmer[19]
+me_short_kmer_type = Kmer[10]
+adapter1_1deletion_kmer_type = Kmer[9]
+adapter2_1deletion_kmer_type = Kmer[9]
+nexteraA_1deletion_kmer_type = Kmer[13]
+me_1deletion_kmer_type = Kmer[18]
+me_1insertion_kmer_type = Kmer[20]
 
 # Specify barcode length of barcodes in the whitelist.
-type barcode_kmer_type = Kmer[7]
+barcode_kmer_type = Kmer[7]
 
 
 # All barcodes in Kmer form.
@@ -139,37 +140,41 @@ def match_or_one_mismatch(whitelist, adapter) -> int:
 
 
 
-type BC_part_raw(
-    seq: seq,
+class BC_part_raw:
+    seq: seq
     qual: str
-)
 
-type BC_parts_raw(
-    bc1_raw: BC_part_raw,
-    bc2_raw: BC_part_raw,
+
+@tuple
+class BC_parts_raw:
+    bc1_raw: BC_part_raw
+    bc2_raw: BC_part_raw
     bc3_raw: BC_part_raw
-)
 
-type AdaptersHammingDists(
-    adapter1: int,
-    adapter2: int,
-    nexteraA: int,
-    me: int,
-)
 
-type ATAC_part(
-    seq: seq,
+@tuple
+class AdaptersHammingDists:
+    adapter1: int
+    adapter2: int
+    nexteraA: int
+    me: int
+
+
+@tuple
+class ATAC_part:
+    seq: seq
     qual: str
-)
 
-type ParsedBCRead(
-    found_all_adapters: bool,
-    bc_parts_raw: BC_parts_raw,
-    atac_part: ATAC_part,
-    phase_block_seq: seq,
-    phase_block_length: int,
+
+@tuple
+class ParsedBCRead:
+    found_all_adapters: bool
+    bc_parts_raw: BC_parts_raw
+    atac_part: ATAC_part
+    phase_block_seq: seq
+    phase_block_length: int
     adapters_hamming_dists: AdaptersHammingDists
-):
+
     def bc_full_seq(self) -> str:
        return str(self.bc_parts_raw.bc1_raw.seq) + str(self.bc_parts_raw.bc2_raw.seq) + str(self.bc_parts_raw.bc3_raw.seq)	
 
@@ -445,8 +450,10 @@ def find_adapters(read: seq, qual: str) -> ParsedBCRead:
     return not_found_all_adapters
 
 
-
-type CorrectedBc(mismatch_dist: int, corrected_bc: str)
+@tuple
+class CorrectedBc:
+    mismatch_dist: int
+    corrected_bc: str
 
 
 def correct_bc_with_whitelist(bc_whitelist: set[barcode_kmer_type], bc: barcode_kmer_type) -> CorrectedBc:
@@ -466,9 +473,14 @@ def correct_bc_with_whitelist(bc_whitelist: set[barcode_kmer_type], bc: barcode_
     return CorrectedBc(-1, str(bc))
 
 
-
-type Barcodes(bc1_hamming_dist: int, bc2_hamming_dist: int, bc3_hamming_dist: int, bc1: seq, bc2: seq, bc3: seq)
-
+@tuple
+class Barcodes:
+    bc1_hamming_dist: int
+    bc2_hamming_dist: int
+    bc3_hamming_dist: int
+    bc1: seq
+    bc2: seq
+    bc3: seq
 
 
 def extract_and_correct_biorad_barcode_in_fastq(fastq_with_raw_bc_filename: str, fastq_with_corrected_bc_filename: str, corrected_bc_stats_tsv_filename: str):
@@ -501,7 +513,9 @@ def extract_and_correct_biorad_barcode_in_fastq(fastq_with_raw_bc_filename: str,
         for record in FASTQ(fastq_with_raw_bc_filename, gzip=True, validate=False, copy=True):
             nbr_reads += 1
 
-            parsed_bc_read = find_adapters(record.seq, record.qual)
+            seq_without_Ns = seq(str(record.seq).replace('N', 'A'))
+
+            parsed_bc_read = find_adapters(seq_without_Ns, record.qual)
 
             if parsed_bc_read.found_all_adapters == False:
                 # Add Biorad tag "br:Z:FoundNotAllAdapters" to read name comment and write ATAC sequence of Ns.

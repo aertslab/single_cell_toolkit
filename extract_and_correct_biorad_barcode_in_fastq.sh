@@ -128,7 +128,7 @@ extract_and_correct_biorad_barcode_in_fastq () {
     # and barcode info in FASTQ comment field.
     # Pipe the new R1 FASTQ into mawk, fix read name comments in R2 reads and
     # write both fixed FASTQ files.
-    "${script_dir}/run_seq_program.sh" \
+    seqc run --release \
         "${script_dir}/extract_and_correct_biorad_barcode_in_fastq.seq" \
             "${fastq_R1_filename}" \
             '/dev/stdout' \
