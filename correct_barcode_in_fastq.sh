@@ -5,9 +5,10 @@ correct_barcode_in_fastq () {
     local bc_whitelist_filename="${1}";
     local fastq_with_raw_bc_filename="${2}";
     local fastq_with_corrected_bc_filename="${3}";
+    local max_mismatches="${4:-1}";
 
-    if [ ${#@} -ne 3 ] ; then
-        printf 'Usage: correct_barcode_in_fastq bc_whitelist_file fastq_with_raw_bc_file fastq_with_corrected_bc_file\n';
+    if [ ${#@} -lt 3 ] ; then
+        printf 'Usage: correct_barcode_in_fastq bc_whitelist_file fastq_with_raw_bc_file fastq_with_corrected_bc_file max_mismatches\n';
         return 1;
     fi
 
@@ -40,12 +41,14 @@ correct_barcode_in_fastq () {
 
     # Correct barcodes in FASTQ file:
     #   - Replace "type K = Kmer[16]" with the correct barcode length in the correct_barcode_in_fastq.seq script.
-    "${script_dir}/run_seq_program.sh" \
-        <(sed -e 's@^type K = Kmer\[16\]$@type K = Kmer['${bc_length}']@' ${script_dir}/correct_barcode_in_fastq.seq) \
-        "${bc_whitelist_filename}" \
-        "${fastq_with_raw_bc_filename}" \
-        "/dev/stdout" \
-        "${fastq_with_corrected_bc_filename}.corrected.bc_stats.tsv" \
+    seqc run \
+        -D bc_length="${bc_length}" \
+        -release \
+        "${script_dir}/correct_barcode_in_fastq.seq" \
+            "${bc_whitelist_filename}" \
+            "${fastq_with_raw_bc_filename}" \
+            "/dev/stdout" \
+            "${fastq_with_corrected_bc_filename}.corrected.bc_stats.tsv" \
       | pigz -p 4 \
       > "${fastq_with_corrected_bc_filename}";
 }
