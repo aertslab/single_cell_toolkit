@@ -2,7 +2,7 @@ import bio
 import gzip
 import sys
 
-from seq_lib.barcode_correction import read_barcode_whitelist_from_file, CorrectedBc, correct_bc_by_qual_order_with_whitelist
+from seq_lib.barcode_correction import read_barcode_whitelist_from_file, CorrectedBc, correct_bc_by_qual_order_with_whitelist, correct_bc_with_Ns_with_whitelist
 
 
 # bc_length needs to be passed when invoking seqc: "seqc run -D bc_length=16 -release correct_barcode_in_fastq.seq"
@@ -43,11 +43,19 @@ def correct_bc_in_fastq(bc_whitelist: set[K], fastq_with_raw_bc_filename: str, f
         for record in bio.FASTQ(fastq_with_raw_bc_filename, gzip=True, validate=False, copy=True):
             nbr_reads += 1
 
-            corrected_bc = correct_bc_by_qual_order_with_whitelist(
-                bc_whitelist,
-                K(record.seq),
-                record.qual,
-                max_hamming_dist
+            corrected_bc = (
+                correct_bc_with_Ns_with_whitelist[K](
+                    bc_whitelist,
+                    str(record.seq),
+                    max_hamming_dist
+                )
+                if 'N' in str(record.seq)
+                else correct_bc_by_qual_order_with_whitelist(
+                    bc_whitelist,
+                    K(record.seq),
+                    record.qual,
+                    max_hamming_dist
+                )
             )
 
             if corrected_bc:

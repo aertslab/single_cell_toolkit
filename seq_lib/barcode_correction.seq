@@ -9,7 +9,6 @@ def read_barcode_whitelist_from_file[kmer_type](bc_whitelist_filename: str, bc_c
     Read whitelisted barcodes from file and convert to a set of Kmers.
     """
 
-    #bc_whitelist = set[kmer_type]()
     bc_whitelist = set()
 
     with open(bc_whitelist_filename, 'r') as fh_bc:
@@ -284,4 +283,54 @@ def correct_bc_by_qual_order_with_whitelist(bc_whitelist, bc, qual, max_hamming_
                 return CorrectedBc(3, str(hamming_dist3_neighbor))
 
     # Hamming distance greater than max_hamming_dist or greater than 3.
+    return None
+
+
+def correct_bc_with_Ns_with_whitelist[kmer_type](bc_whitelist, bc_with_Ns: str, max_hamming_dist: Optional[int]=None) -> Optional[CorrectedBc]:
+    """
+    Check if provided barcode with Ns matches the whitelist with up to max_hamming_dist (0, 1, 2 or 3) mismatches
+    (only Ns will be corrected).
+    """
+
+    max_hamming_distx = ~max_hamming_dist if max_hamming_dist else 3
+    max_hamming_distx = 3 if max_hamming_distx == -1 else max_hamming_distx
+
+    n_count = 0
+    n_positions = List[int](capacity=len(bc_with_Ns))
+
+    for idx, nuc in enumerate(bc_with_Ns):
+        if nuc == 'N':
+            n_count += 1
+            n_positions.append(idx)
+
+    if n_count > max_hamming_distx:
+        # Do not try to correct barcode, if there are more Ns than max allowd hamming distance.
+        return None
+
+    # Convert barcode with Ns to a kmer.
+    bc = kmer_type(bc_with_Ns.replace('N', 'A'))
+
+    if n_count == 1:
+        for b in (k'A', k'C', k'G', k'T'):
+            bc = bc |> base(n_positions[0], b)
+
+            if bc in bc_whitelist:
+                return CorrectedBc(1, str(bc))
+    elif n_count == 2:
+        for b1 in (k'A', k'C', k'G', k'T'):
+            for b2 in (k'A', k'C', k'G', k'T'):
+                bc =bc |> base(n_positions[0], b1) |> base(n_positions[1], b2)
+
+                if bc in bc_whitelist:
+                    return CorrectedBc(2, str(bc))
+    elif n_count == 3:
+        for b1 in (k'A', k'C', k'G', k'T'):
+            for b2 in (k'A', k'C', k'G', k'T'):
+                for b3 in (k'A', k'C', k'G', k'T'):
+                    bc = bc |> base(n_positions[0], b1) |> base(n_positions[1], b2) |> base(n_positions[2], b3)
+
+                    if bc in bc_whitelist:
+                        return CorrectedBc(3, str(bc))
+
+    # Ns in barcode could not be corrected.
     return None
