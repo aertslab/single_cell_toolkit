@@ -408,7 +408,7 @@ def main():
 
         # Create output path.
         project_name = "RNA"  # needs to be updated
-        output_path = (Path(args.output) / f"{project_name}_saturation.png",)
+        output_path = Path(args.output) / f"{project_name}_saturation.png"
 
     x_data, y_data = prepare_data(
         complexity_info_path=complexity_info_path, assay_type=args.assay_type
