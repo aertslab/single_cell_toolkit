@@ -18,19 +18,19 @@ Usage:
         <interleaved [true|false]> \
         <add_barcode_in_comment [true|false]> \
         <barcode_tags_or_separator> \
-        <compress_fastq_cmd [bgzip|pigz|gzip|stdout|-]> \
+        <compress_fastq_cmd [bgzip|pigz|gzip|stdout|-|uncompressed]> \
 
 Purpose: Barcode 10x scATAC FASTQ files by adding the cell barcode from R2 to each
          read in R1 and R3, as a comment or in front of the original read name.
 
 Parameters:
-  - fastq_R1:   FASTQ R1 fileanme (uncompressed or gzipped).
-  - fastq_R2:   FASTQ R2 fileanme with barcodes (uncompressed or gzipped).
-  - fastq_R3:   FASTQ R3 fileanme (uncompressed or gzipped).
+  - fastq_R1:   FASTQ R1 filename (uncompressed or gzipped).
+  - fastq_R2:   FASTQ R2 filename with barcodes (uncompressed or gzipped).
+  - fastq_R3:   FASTQ R3 filename (uncompressed or gzipped).
   - fastq_output_prefix: Output prefix for FASTQ output file(s).
   - interleaved:
-      - true:   Write one output FASTQ file with reads from R1 and R3 interleaved (default).
-      - false:  Write R1 and R2 output FASTQ file with reads from R1 and R3 respectively.
+      - true:   Write one output FASTQ file with reads from R1 and R3 interleaved.
+      - false:  Write R1 and R2 output FASTQ file with reads from R1 and R3 respectively (default).
   - add_barcode_in_comment:
       - true:   Add barcode and barcode quality from R2 as read comment in SAM spec format
                 (for usage wtih: "bwa -C") (default).
@@ -44,17 +44,19 @@ Parameters:
           (default: "-").
   - compress_fastq_cmd:
       - Compression program to use for output FASTQ files:
-          - "bgzip":  'bgzip -@ 4 -l 6 -c'  (default)
-          - "pigz":   'pigz -p 4 -6 -c'
+          - "bgzip":  'bgzip -@ 4 -l 6 -c'
+          - "pigz":   'pigz -p 4 -6 -c'  (default)
+          - "igzip":  'igzip -3 -c'  (very fast, low compression)
           - "gzip":   'gzip -6 -c'
           - "stdout":  Write uncompressed output to stdout.
           - "-":       Write uncompressed output to stdout.
+          - "uncompressed":  Write uncompressed FASTQ files.
           - full custom command
 
         To change number of compression threads:
           - export compress_fastq_threads="4"
 
-        To change comprssion level:
+        To change compression level:
           - export compress_fastq_level="6"
 ```
 

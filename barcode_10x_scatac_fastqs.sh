@@ -9,16 +9,20 @@
 
 decompress_fastq_cat_cmd='cat';
 decompress_fastq_zcat_cmd='zcat';
+decompress_fastq_igzip_cmd='igzip -c -d';
 
 
 # Number of threads to use to compress each FASTQ output file.
 compress_fastq_threads="${compress_fastq_threads:-4}";
 
-# Gzip compression level.
+# Gzip compression level for bgzip, pigz and gzip.
 compress_fastq_level="${compress_fastq_level:-6}";
+# Gzip compression level for igzip (3 is maximum).
+compress_fastq_igzip_level="3";
 
 compress_fastq_bgzip_cmd="bgzip -@ ${compress_fastq_threads} -l ${compress_fastq_level} -c";
 compress_fastq_pigz_cmd="pigz -p ${compress_fastq_threads} -${compress_fastq_level} -c";
+compress_fastq_igzip_cmd="igzip -${compress_fastq_igzip_level} -c";
 compress_fastq_gzip_cmd="gzip -${compress_fastq_level} -c";
 
 
@@ -68,6 +72,7 @@ barcode_10x_scatac_fastqs () {
         printf '      - Compression program to use for output FASTQ files:\n';
         printf "          - \"bgzip\":  '%s'\n" "${compress_fastq_bgzip_cmd}";
         printf "          - \"pigz\":   '%s'  (default)\n" "${compress_fastq_pigz_cmd}";
+        printf "          - \"igzip\":  '%s'  (very fast, low compression)\n" "${compress_fastq_igzip_cmd}";
         printf "          - \"gzip\":   '%s'\n" "${compress_fastq_gzip_cmd}";
         printf '          - "stdout":  Write uncompressed output to stdout.\n';
         printf '          - "-":       Write uncompressed output to stdout.\n';
@@ -124,21 +129,30 @@ barcode_10x_scatac_fastqs () {
     fi
 
 
+    if type igzip > /dev/null 2>&1 ; then
+        # Decompress gzipped FASTQ files with igzip if installed (6x faster than gzip).
+        local decompress_fastq_gzipped_cmd="${decompress_fastq_igzip_cmd}";
+    else
+        # Decompress gzipped FASTQ files with gzip.
+        local decompress_fastq_gzipped_cmd="${decompress_fastq_zcat_cmd}";
+    fi
+
+
     # Detect if input FASTQ files are gzip compressed or not.
     if [ "${fastq_R1_filename}" != "${fastq_R1_filename%.gz}" ] ; then
-        local decompress_R1_fastq_cmd="${decompress_fastq_zcat_cmd}";
+        local decompress_R1_fastq_cmd="${decompress_fastq_gzipped_cmd}";
     else
         local decompress_R1_fastq_cmd="${decompress_fastq_cat_cmd}";
     fi
 
     if [ "${fastq_R2_filename}" != "${fastq_R2_filename%.gz}" ] ; then
-        local decompress_R2_fastq_cmd="${decompress_fastq_zcat_cmd}";
+        local decompress_R2_fastq_cmd="${decompress_fastq_gzipped_cmd}";
     else
         local decompress_R2_fastq_cmd="${decompress_fastq_cat_cmd}";
     fi
 
     if [ "${fastq_R3_filename}" != "${fastq_R3_filename%.gz}" ] ; then
-        local decompress_R3_fastq_cmd="${decompress_fastq_zcat_cmd}";
+        local decompress_R3_fastq_cmd="${decompress_fastq_gzipped_cmd}";
     else
         local decompress_R3_fastq_cmd="${decompress_fastq_cat_cmd}";
     fi
@@ -149,6 +163,8 @@ barcode_10x_scatac_fastqs () {
             local compress_fastq_cmd="${compress_fastq_bgzip_cmd}";;
         pigz)
             local compress_fastq_cmd="${compress_fastq_pigz_cmd}";;
+        igzip)
+            local compress_fastq_cmd="${compress_fastq_igzip_cmd}";;
         gzip)
             local compress_fastq_cmd="${compress_fastq_gzip_cmd}";;
         stdout|-)
