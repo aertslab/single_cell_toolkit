@@ -64,8 +64,10 @@ def prepare_data(complexity_info_path: Path, assay_type):
         raise Exception(f"Not a valid assay type: {assay_type}")
 
 
-# Define the Michaelis-Menten Kinetics model that will be used for the model fitting
 def MM(x, Vmax, Km):
+    """
+    Define the Michaelis-Menten Kinetics model that will be used for the model fitting.
+    """
     if Vmax > 0 and Km > 0:
         y = (Vmax * x) / (Km + x)
     else:

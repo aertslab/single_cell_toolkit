@@ -57,9 +57,15 @@ def read_fragment(path_to_frag) :
     return(fragments_df)
 
 
-# michaleis-menten kinetic function for fit
 def MM(x, Vmax, Km):
-    return (Vmax*x)/(Km+x)
+    """
+    Define the Michaelis-Menten Kinetics model that will be used for the model fitting.
+    """
+    if Vmax > 0 and Km > 0:
+        y = (Vmax * x) / (Km + x)
+    else:
+        y = 1e10
+    return y
 
 
 # sub-sampling function
