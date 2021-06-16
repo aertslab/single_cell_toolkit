@@ -2,6 +2,7 @@
 
 ### load libs
 import argparse
+import gzip
 import pandas as pd
 import numpy as np
 import os
@@ -43,14 +44,82 @@ class WeightedPopulation(Sequence):
         return self.population[bisect.bisect(self.cumweights, i)]
 
 
-# fragment file loading function
-def read_fragment(path_to_frag):
-    fragments_df = pr.read_bed(path_to_frag).df
-    if "Score" not in fragments_df or all(fragments_df["Score"] == "."):
-        raise ValueError("Duplicate information is missing")
-    # Convert to category/float32 for memory efficiency
-    fragments_df["Name"] = fragments_df["Name"].astype("category")
-    fragments_df["Score"] = fragments_df["Score"].astype("int32")
+def read_bc_and_score_from_fragments_file(fragments_bed_filename, use_polars: bool = False) -> pd.DataFrame:
+    """
+    Read cell barcode and score from fragments BED file.
+
+    Parameters
+    ----------
+    fragments_bed_filename: Fragments BED filename.
+    use_polars: Use polars instead of pandas for reading the fragments BED file.
+
+    Returns
+    -------
+    Pandas dataframe with barcodes and score.
+    """
+
+    bed_column_names = (
+        "Chromosome", "Start", "End", "Name", "Score", "Strand", "ThickStart", "ThickEnd", "ItemRGB", "BlockCount",
+        "BlockSizes", "BlockStarts"
+    )
+
+    # Set the correct open function depending if the fragments BED file is gzip compressed or not.
+    open_fn = gzip.open if fragments_bed_filename.endswith('.gz') else open
+
+    skip_rows = 0
+    nbr_columns = 0
+    with open_fn(fragments_bed_filename, 'rt') as fragments_bed_fh:
+        for line in fragments_bed_fh:
+            # Remove newlines and spaces.
+            line = line.strip()
+
+            if not line or line.startswith('#'):
+                # Count number of empty lines and lines which start with a comment before the actual data.
+                skip_rows += 1
+            else:
+                # Get number of columns from the first real BED entry.
+                nbr_columns = len(line.split('\t'))
+
+                # Stop reading the BED file.
+                break
+
+    if nbr_columns < 5:
+        raise ValueError(
+            f'Fragments BED file needs to have at least 5 columns. "{fragments_bed_filename}" contains only '
+            f'{nbr_columns} columns.'
+        )
+
+    if use_polars:
+        import polars as pl
+
+        # Read fragments BED file with polars.
+        fragments_df = pl.read_csv(
+            fragments_bed_filename,
+            has_headers=False,
+            skip_rows=skip_rows,
+            sep='\t',
+            use_pyarrow=True,
+            new_columns=bed_column_names[:nbr_columns]
+        ).with_columns([
+            pl.col('Name').cast(pl.Utf8), pl.col('Score').cast(pl.Int32)
+        ]).to_pandas()
+
+        # Convert "Name" column to pd.Categorical as groupby operations will be done on it later.
+        fragments_df["Name"] = fragments_df["Name"].astype('category')
+    else:
+        # Read fragments BED file with pandas.
+        fragments_df = pd.read_table(
+            fragments_bed_filename,
+            sep='\t',
+            skiprows=skip_rows,
+            header=None,
+            usecols=[3,4],
+            names=["Name", "Score"],
+            doublequote=False,
+            engine='c',
+            dtype={"Name": "category", "Score": "int32"}
+        )
+
     return fragments_df
 
 
@@ -258,14 +327,14 @@ def main():
     percentages = [float(x) for x in args.percentages.split(",")]
 
     # Load fragments BED file.
-    fragments_df = read_fragment(args.fragments_input_bed_filename)
+    fragments_df = read_bc_and_score_from_fragments_file(args.fragments_input_bed_filename)
 
     # Sub-sample.
     stat_buket = sub_sample_fragment(
         fragments_df,
         min_uniq_frag=args.min_frags_per_cb,
         n_chunk=args.subsamplings,
-        outfile=args.output_dir + ".sampling_stats.tsv",
+        outfile=args.output_prefix + ".sampling_stats.tsv",
         whitelist=args.whitelist,
     )
 
@@ -273,7 +342,7 @@ def main():
     fit_MM(
         stat_buket,
         percentages=percentages,
-        path_to_fig=args.output + ".saturation.png",
+        path_to_fig=args.output_prefix + ".saturation.png",
         x_axis="total_frag_count",
         y_axis="median_uniq_frag_per_bc",
     )
