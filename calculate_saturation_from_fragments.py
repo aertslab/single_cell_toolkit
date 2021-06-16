@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 ### load libs
+import argparse
 import pandas as pd
 import numpy as np
 import os
@@ -9,24 +10,18 @@ from uncertainties import ufloat
 import matplotlib.pylab as plt
 import bisect
 import random
-from collections import Counter, Sequence
+from collections import Counter
+from collections.abc import Sequence
 import pyranges as pr
 
-### get arguments
-import argparse
-parser = argparse.ArgumentParser()
-parser.add_argument('-i','--input', help='path to fragment file', required=True)
-parser.add_argument('-o','--output', help='path to output dir', default = "./")
-parser.add_argument('-p','--percentages', metavar='percentages', type=str, help='Comma separated list of decimal percentages to predict', default='0.3,0.6,0.9')
-parser.add_argument('-m','--minimum_frag_for_bc', metavar='integer', type=int, help='Minimum number of uniq fragments to select real cell barcodes', default=200)
-parser.add_argument('-n','--n_chunk', metavar='integer', type=int, help='Number of sub-sampling to perform', default=10)
-parser.add_argument('-w','--whitelist', metavar='string', type=str, help='Path to file with barcode whitelist', default=None)
 
-# Parse arguments
-args = parser.parse_args()
-percentages = [float(x) for x in args.percentages.split(',')]
+__author__ = "Swan Floc’Hlay"
+__contributors__ = "Gert Hulselmans"
+__version__ = "v0.2.0"
+
 
 ### initialise function and classes
+
 
 # class of fragment data weighted by duplicate count for sampling
 class WeightedPopulation(Sequence) :
@@ -36,8 +31,8 @@ class WeightedPopulation(Sequence) :
         self.cumweights = []
         cumsum = 0 # compute cumulative weight
         for w in weights:
-            cumsum += w   
-            self.cumweights.append(cumsum)  
+            cumsum += w  
+            self.cumweights.append(cumsum) 
     def __len__(self):
         return self.cumweights[-1]
     def __getitem__(self, i):
@@ -168,14 +163,89 @@ def fit_MM(stat_bucket, percentages = [0.3,0.6,0.9], path_to_fig = "./", x_axis 
     plt.close()
 
 
-### Run script for argparsed agruments
-# load frag files
-fragments_df = read_fragment(args.input)
-# sub-sample
-stat_buket = sub_sample_fragment(fragments_df,
-                        min_uniq_frag = args.minimum_frag_for_bc,
-                        n_chunk = args.n_chunk,
-                        outfile = args.output + "sampling_stats.tab",
-                        whitelist = args.whitelist)
-# fit'n'plot for total count
-fit_MM(stat_buket, percentages = percentages, path_to_fig = args.output + "saturation.png", x_axis = "total_frag_count", y_axis = "median_uniq_frag_per_bc")
+def main():
+    parser = argparse.ArgumentParser(
+        description="Infer saturation of scATAC from fragments file."
+    )
+    parser.add_argument(
+        "-i",
+        "--input",
+        dest="fragments_input_bed_filename",
+        action="store",
+        type=str,
+        required=True,
+        help="Fragment input BED filename.",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        dest="output_prefix",
+        action="store",
+        type=str,
+        required=True,
+        help="Output prefix, which will contain PNG file with saturation curve and TSV file with summary of "
+        "reads and additional reads needed to reach saturation specified by percentages."
+    )
+    parser.add_argument(
+        "-p",
+        "--percentages",
+        dest="percentages",
+        type=str,
+        help='Comma separated list of decimal percentages to predict. Default: "0.3,0.6,0.9"',
+        default="0.3,0.6,0.9",
+    )
+    parser.add_argument(
+        "-m",
+        "--min_frags_per_cb",
+        dest="min_frags_per_cb",
+        type=int,
+        help="Minimum number of unique fragments per cell barcodes",
+        default=200
+    )
+    parser.add_argument(
+        "-s",
+        "--subsamplings",
+        dest="subsamplings",
+        type=int,
+        help="Number of sub-samplings to perform.",
+        default=10
+    )
+    parser.add_argument(
+        "-w",
+        "--whitelist",
+        dest="whitelist",
+        type=str,
+        help="Barcode whitelist filename.",
+        default=None
+    )
+
+    parser.add_argument(
+        "-V",
+        "--version",
+        action="version",
+        version=f"{__version__}"
+    )
+
+    args = parser.parse_args()
+
+    percentages = [float(x) for x in args.percentages.split(",")]
+
+    # Load fragments BED file.
+    fragments_df = read_fragment(args.fragments_input_bed_filename)
+
+    # Sub-sample.
+    stat_buket = sub_sample_fragment(
+        fragments_df,
+        min_uniq_frag = args.min_frags_per_cb,
+        n_chunk = args.subsamplings,
+        outfile = args.output_dir + ".sampling_stats.tsv",
+        whitelist = args.whitelist
+    )
+
+    # Fit'n'plot for total count.
+    fit_MM(stat_buket, percentages = percentages, path_to_fig = args.output + ".saturation.png", x_axis = "total_frag_count", y_axis = "median_uniq_frag_per_bc")
+
+
+if __name__ == "__main__":
+    main()
+
