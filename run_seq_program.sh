@@ -10,7 +10,7 @@ run_seq_program () {
         return 1;
     fi
 
-    OMP_NUM_THREADS=4 LIBRARY_PATH="${seq_root_dir}/lib/seq:${LIBRARY_PATH}" "${seq_root_dir}/bin/seqc" "${@}";
+    OMP_NUM_THREADS=4 LIBRARY_PATH="${seq_root_dir}/lib/seq:${LIBRARY_PATH}" "${seq_root_dir}/bin/seqc" run -release "${@}";
 }
 
 

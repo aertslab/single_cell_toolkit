@@ -13,7 +13,6 @@ import bisect
 import random
 from collections import Counter
 from collections.abc import Sequence
-import pyranges as pr
 
 
 __author__ = "Swan Floc’Hlay"
