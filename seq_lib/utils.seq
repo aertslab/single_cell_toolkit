@@ -1,0 +1,16 @@
+import gzip
+
+
+def read_line_from_uncompressed_or_gzipped_file(filename: str):
+    """
+    Yield line from uncompressed or gzip compressed file.
+    """
+
+    if filename.endswith('.gz'):
+        with gzip.open(filename, 'r') as fh:
+            for line in fh:
+                yield line
+    else:
+        with open(filename, 'r') as fh:
+            for line in fh:
+                yield line

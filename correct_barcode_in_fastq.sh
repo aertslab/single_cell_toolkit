@@ -25,7 +25,13 @@ correct_barcode_in_fastq () {
     local first_barcode='';
 
     # Read first barcode from barcode whitelist file.
-    read -r first_barcode < "${bc_whitelist_filename}";
+    if [ "${bc_whitelist_filename%.gz}" == "{bc_whitelist_filename}" ] ; then
+        # Uncompressed file.
+        read -r first_barcode < "${bc_whitelist_filename}";
+    else
+        # Gzip compressed file.
+        first_barcode=$(zcat "${bc_whitelist_filename}" | head -n 1);
+    fi
 
     # Get length of first barcode.
     local -i bc_length="${#first_barcode}";

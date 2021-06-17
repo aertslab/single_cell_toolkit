@@ -3,6 +3,8 @@ from bio import *
 import gzip
 import sys
 
+from .utils import read_line_from_uncompressed_or_gzipped_file
+
 
 def read_barcode_whitelist_from_file[kmer_type](bc_whitelist_filename: str, bc_column_idx: int = 0, warning: bool=True):
     """
@@ -11,35 +13,34 @@ def read_barcode_whitelist_from_file[kmer_type](bc_whitelist_filename: str, bc_c
 
     bc_whitelist = set()
 
-    with open(bc_whitelist_filename, 'r') as fh_bc:
-        for bc_line in fh_bc:
-            bc_str = bc_line.strip().split('\t')[bc_column_idx]
-            bc_length = len(bc_str)
+    for bc_line in read_line_from_uncompressed_or_gzipped_file(bc_whitelist_filename):
+        bc_str = bc_line.strip().split('\t')[bc_column_idx]
+        bc_length = len(bc_str)
 
-            if bc_length == 0 or bc_str[0] == '#':
-                # Skip empty lines and lines that start with a comment.
-                continue
+        if bc_length == 0 or bc_str[0] == '#':
+            # Skip empty lines and lines that start with a comment.
+            continue
 
-            if len(kmer_type()) != bc_length:
-                # Skip barcodes if they have a different length than the Kmer length.
-                if warning:
-                    print(
-                        f'Warning: Barcode "{bc_str}" is skipped (barcode length of {bc_length} instead of requested {len(kmer_type())}).',
-                        file=sys.stderr
-                    )
-                continue
+        if len(kmer_type()) != bc_length:
+            # Skip barcodes if they have a different length than the Kmer length.
+            if warning:
+                print(
+                    f'Warning: Barcode "{bc_str}" is skipped (barcode length of {bc_length} instead of requested {len(kmer_type())}).',
+                    file=sys.stderr
+                )
+            continue
 
-            if 'N' in bc_str:
-                # Skip barcodes if they have an N.
-                if warning:
-                    print(
-                        f'Warning: Barcode "{bc_str}" is skipped as it contains an "N".',
-                        file=sys.stderr
-                    )
-                continue
+        if 'N' in bc_str:
+            # Skip barcodes if they have an N.
+            if warning:
+                print(
+                    f'Warning: Barcode "{bc_str}" is skipped as it contains an "N".',
+                    file=sys.stderr
+                )
+            continue
 
-            bc = kmer_type(seq(bc_str))
-            bc_whitelist.add(bc)
+        bc = kmer_type(seq(bc_str))
+        bc_whitelist.add(bc)
 
     return bc_whitelist
 
