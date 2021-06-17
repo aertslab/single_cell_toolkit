@@ -33,6 +33,10 @@ nexteraA_length: int = 14
 me_length: int  = 19
 me_short_length: int = 10
 
+# Minimum read length before even trying to find adapters and barcodes.
+min_read_length = bc1_length + 4 + adapter1_length + bc2_length + adapter2_length + bc3_length + nexteraA_length + me_length + 1
+
+
 adapter1_kmer_type = Kmer[10]
 adapter2_kmer_type = Kmer[10]
 nexteraA_kmer_type = Kmer[14]
@@ -197,6 +201,12 @@ not_found_all_adapters = ParsedBCRead(
 
 
 def find_adapters(read: seq, qual: str) -> ParsedBCRead:
+    read_length = len(read)
+
+    if read_length <= min_read_length:
+        # Read is too short to find adapters and barcodes.
+        return not_found_all_adapters
+
     phase_block_length_to_seqs = {
         0: [s''], # Handle special
         1: [s'A'],
@@ -345,7 +355,6 @@ def find_adapters(read: seq, qual: str) -> ParsedBCRead:
             current_bc3_length -= 1
 
 
-        read_length = len(read)
         me_found = False
         me_start = nexteraA_end - 1
         me_end = me_start + me_length
