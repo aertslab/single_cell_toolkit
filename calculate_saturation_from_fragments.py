@@ -3,6 +3,7 @@
 ### load libs
 import argparse
 import gzip
+import logging
 import pandas as pd
 import numpy as np
 import os
@@ -14,47 +15,35 @@ import random
 from collections import Counter
 from collections.abc import Sequence
 
+import polars as pl
+
 
 __author__ = "Swan Floc’Hlay"
 __contributors__ = "Gert Hulselmans"
 __version__ = "v0.2.0"
 
 
+FORMAT = '%(asctime)-15s %(message)s'
+logging.basicConfig(format=FORMAT, level=logging.INFO)
+logger = logging.getLogger('calculate_saturation_from_fragments')
+
+
 ### initialise function and classes
 
 
-# class of fragment data weighted by duplicate count for sampling
-class WeightedPopulation(Sequence):
-    def __init__(self, population, weights):
-        assert len(population) == len(weights) > 0
-        self.population = population
-        self.cumweights = []
-        cumsum = 0  # compute cumulative weight
-        for w in weights:
-            cumsum += w
-            self.cumweights.append(cumsum)
-
-    def __len__(self):
-        return self.cumweights[-1]
-
-    def __getitem__(self, i):
-        if not 0 <= i < len(self):
-            raise IndexError(i)
-        return self.population[bisect.bisect(self.cumweights, i)]
-
-
-def read_bc_and_score_from_fragments_file(fragments_bed_filename, use_polars: bool = False) -> pd.DataFrame:
+def read_bc_and_counts_from_fragments_file(fragments_bed_filename: str) -> pl.DataFrame:
     """
-    Read cell barcode and score from fragments BED file.
+    Read cell barcode (column 4) and counts per fragment (column 5) from fragments BED file.
+    Cell barcodes will appear more than once as they have counts per fragment, but as
+    the fragment locations are not needed, they are not returned.
 
     Parameters
     ----------
     fragments_bed_filename: Fragments BED filename.
-    use_polars: Use polars instead of pandas for reading the fragments BED file.
 
     Returns
     -------
-    Pandas dataframe with barcodes and score.
+    Polars dataframe with cell barcode and count per fragment (column 4 and 5 of BED file).
     """
 
     bed_column_names = (
@@ -67,6 +56,7 @@ def read_bc_and_score_from_fragments_file(fragments_bed_filename, use_polars: bo
 
     skip_rows = 0
     nbr_columns = 0
+
     with open_fn(fragments_bed_filename, 'rt') as fragments_bed_fh:
         for line in fragments_bed_fh:
             # Remove newlines and spaces.
@@ -88,36 +78,24 @@ def read_bc_and_score_from_fragments_file(fragments_bed_filename, use_polars: bo
             f'{nbr_columns} columns.'
         )
 
-    if use_polars:
-        import polars as pl
-
-        # Read fragments BED file with polars.
-        fragments_df = pl.read_csv(
-            fragments_bed_filename,
-            has_headers=False,
-            skip_rows=skip_rows,
-            sep='\t',
-            use_pyarrow=True,
-            new_columns=bed_column_names[:nbr_columns]
-        ).with_columns([
-            pl.col('Name').cast(pl.Utf8), pl.col('Score').cast(pl.Int32)
-        ]).to_pandas()
-
-        # Convert "Name" column to pd.Categorical as groupby operations will be done on it later.
-        fragments_df["Name"] = fragments_df["Name"].astype('category')
-    else:
-        # Read fragments BED file with pandas.
-        fragments_df = pd.read_table(
-            fragments_bed_filename,
-            sep='\t',
-            skiprows=skip_rows,
-            header=None,
-            usecols=[3,4],
-            names=["Name", "Score"],
-            doublequote=False,
-            engine='c',
-            dtype={"Name": "category", "Score": "int32"}
-        )
+    # Read cell barcode (column 4) and counts (column 5) per fragemnt from fragments BED file.
+    fragments_df = pl.read_csv(
+        fragments_bed_filename,
+        has_headers=False,
+        skip_rows=skip_rows,
+        sep='\t',
+        use_pyarrow=True,
+        columns=["column_1", "column_2", "column_3", "column_4", "column_5"],
+        new_columns=["Chromosome", "Start", "End", "CellBarcode", "FragmentCount"],
+    ).with_columns(
+        [
+            pl.col("Chromosome").cast(pl.Categorical),
+            pl.col("Start").cast(pl.Int32),
+            pl.col("End").cast(pl.Int32),
+            pl.col("CellBarcode").cast(pl.Categorical),
+            pl.col("FragmentCount").cast(pl.Int32),
+        ]
+    )
 
     return fragments_df
 
@@ -134,62 +112,87 @@ def MM(x, Vmax, Km):
 
 
 # sub-sampling function
-def sub_sample_fragment(
+def sub_sample_fragments(
     fragments_df,
     min_uniq_frag=200,
     n_chunk=10,
     outfile="sampling_stats.tab",
     whitelist=None,
 ):
-    # sample on total size with weight
-    pop = WeightedPopulation(list(fragments_df.index), fragments_df["Score"])
-    lp = len(pop)
-    sublist = random.sample(pop, lp)
-    # init stats buket
-    stat_buket = {
+    # init stats bucket
+    stats_bucket = {
         "mean_frag_per_bc": {"chunk 0": 0},  # mean read per cell
         "median_uniq_frag_per_bc": {"chunk 0": 0},  # median uniq fragment per cell
         "total_frag_count": {"chunk 0": 0},  # total read count (all barcodes)
+        #"total_frag_count_bc_filtered": {"chunk 0": 0},
         "cell_barcode_count": {
             "chunk 0": 0
         },  # number of barcodes with n_reads > min_uniq_frag
     }
-    # Find real cell barcode
-    chunk = "chunk " + str(n_chunk)
-    pop_count = pd.DataFrame.from_dict(
-        Counter(sublist), orient="index", columns=[chunk]
+
+    good_cell_barcodes = fragments_df.groupby("CellBarcode").agg(
+        pl.col("FragmentCount").count().alias('nbr_frags_per_CBs')
+    ).filter(
+        pl.col("nbr_frags_per_CBs") > min_uniq_frag
     )
-    pop_count = pop_count.join(fragments_df)
-    tmp_mufpc = pop_count.astype({chunk: "bool"}).groupby("Name")[chunk].sum()
-    bc = list(tmp_mufpc[tmp_mufpc > min_uniq_frag].index)
-    print("Keeping " + str(len(bc)) + " barcodes with sufficient fragment counts")
-    # Filter barcodes with whitelist
-    if whitelist is not None:
-        whitelist_bc = list(pd.read_csv(whitelist, names=["valid_bc"])["valid_bc"])
-        bc = [x for x in bc if x in whitelist_bc]
-        print("Keeping " + str(len(bc)) + " barcodes in whitelist")
-    # compute stats per chunk of increasing size
-    for i in range(1, n_chunk + 1):
-        chunk = "chunk " + str(i)
-        print("Processing " + chunk)
-        pop_count = [sublist[index] for index in range(0, round(i * lp / n_chunk))]
-        pop_count = pd.DataFrame.from_dict(
-            Counter(pop_count), orient="index", columns=[chunk]
+
+    nbr_good_cell_barcodes = good_cell_barcodes.height
+
+    # Create dataframe where each row contain one fragment:
+    #   - Original dataframe has a count per fragment with the same cell barcode.
+    #   - Create a row for each count, so we can sample fairly afterwards.
+    fragments_all_df = fragments_df.with_column(
+        pl.col("FragmentCount").repeat_by(
+            pl.col("FragmentCount")
         )
-        # Reattribute cell barcode
-        pop_count = pop_count.join(fragments_df)
-        tmp_mrpc = pop_count.groupby("Name")[chunk].sum()
-        tmp_mufpc = pop_count.astype({chunk: "bool"}).groupby("Name")[chunk].sum()
-        # Count fragment irrespective of bc threshold
-        stat_buket["total_frag_count"][chunk] = np.sum(tmp_mrpc)
-        # select barcode and compute stats
-        stat_buket["mean_frag_per_bc"][chunk] = np.mean(tmp_mrpc.loc[bc])
-        stat_buket["median_uniq_frag_per_bc"][chunk] = np.median(tmp_mufpc.loc[bc])
-        stat_buket["cell_barcode_count"][chunk] = len(bc)
+    ).explode("FragmentCount")
+
+    for fraction in np.arange(0.1, 1.1, 0.1):
+        chunk = "chunk " + str(int(fraction * 10))
+
+        logger.info(f"Random sample: {fraction}")
+
+        # Sample all fragments (with duplicates).
+        fragments_sampled_df = fragments_all_df.sample(frac=fraction)
+        stats_bucket["total_frag_count"][chunk] = fragments_sampled_df.height
+
+        logger.info(f"Get good barcodes from Random sample: {fraction}")
+        fragments_sampled_for_good_bc_df = good_cell_barcodes.join(fragments_all_df.sample(frac=fraction), left_on="CellBarcode", right_on="CellBarcode", how="left")
+        #fragments_sampled_for_good_bc_df = good_cell_barcodes.join(fragments_sampled_df, left_on="CellBarcode", right_on="CellBarcode", how="left")
+
+        # Get number of sampled fragments (with possible duplicate fragments).
+        #stats_bucket["total_frag_count_bc_filtered"][chunk] = fragments_sampled_for_good_bc_df.height
+
+        # fragments_all_df.groupby(["CellBarcode", "Chromosome", "Start", "End"]).agg(pl.col('FragmentCount').count()).filter(pl.col("FragmentCount_count") >= 3).filter(pl.col("CellBarcode") == "TTTACGAAGATGGACA-1")
+
+        logger.info("Calculate mean number of fragments per barcode.")
+        # Calculate mean number of fragments per barcode.
+        stats_bucket["mean_frag_per_bc"][chunk] = fragments_sampled_for_good_bc_df.select(
+            [pl.col('CellBarcode'), pl.col('FragmentCount')]
+        ).groupby("CellBarcode").agg(
+            [pl.count("FragmentCount").alias("FragmentsPerCB")]
+        ).select(
+            [pl.col("FragmentsPerCB").mean().alias("MeanFragmentsPerCB")]
+        )["MeanFragmentsPerCB"][0]
+
+        logger.info("Calculate median number of unique fragments per barcode.")
+        stats_bucket["median_uniq_frag_per_bc"][chunk] = fragments_sampled_for_good_bc_df.groupby(["CellBarcode", "Chromosome", "Start", "End"]).agg(
+            pl.col("FragmentCount").first().alias("UniqueFragmentsPerCB")
+        ).select([pl.col("CellBarcode"), pl.col("UniqueFragmentsPerCB")]
+        ).groupby("CellBarcode").agg(
+            pl.col("UniqueFragmentsPerCB").count().alias("UniqueFragmentsPerCB")
+        ).select(
+            pl.col("UniqueFragmentsPerCB").median()
+        )["UniqueFragmentsPerCB"][0]
+
+        stats_bucket["cell_barcode_count"][chunk] = nbr_good_cell_barcodes
+
+    logger.info("Save data as tab file.")
+
     # Save data as tab file
-    stat_buket = pd.DataFrame(stat_buket)
-    stat_buket.to_csv(outfile, sep="\t")
-    return stat_buket
+    stats_bucket = pd.DataFrame(stats_bucket)
+    stats_bucket.to_csv(outfile, sep="\t")
+    return stats_bucket
 
 
 # MM-fit function
@@ -325,11 +328,17 @@ def main():
 
     percentages = [float(x) for x in args.percentages.split(",")]
 
+
+    # Enable global string cache.
+    pl.frame.toggle_string_cache(True)
+
     # Load fragments BED file.
-    fragments_df = read_bc_and_score_from_fragments_file(args.fragments_input_bed_filename)
+    logger.info("Loading fragments BED file started.")
+    fragments_df = read_bc_and_counts_from_fragments_file(args.fragments_input_bed_filename)
+    logger.info("Loading fragments BED file finished.")
 
     # Sub-sample.
-    stat_buket = sub_sample_fragment(
+    stats_bucket = sub_sample_fragments(
         fragments_df,
         min_uniq_frag=args.min_frags_per_cb,
         n_chunk=args.subsamplings,
@@ -337,14 +346,16 @@ def main():
         whitelist=args.whitelist,
     )
 
+    logger.info("fit_MM.")
     # Fit'n'plot for total count.
     fit_MM(
-        stat_buket,
+        stats_bucket,
         percentages=percentages,
         path_to_fig=args.output_prefix + ".saturation.png",
         x_axis="total_frag_count",
         y_axis="median_uniq_frag_per_bc",
     )
+    logger.info("Finished.")
 
 
 if __name__ == "__main__":
