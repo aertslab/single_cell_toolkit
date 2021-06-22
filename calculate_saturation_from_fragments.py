@@ -214,7 +214,7 @@ def fit_MM(
     # fit to MM function
     best_fit_ab, covar = curve_fit(MM, x_data, y_data, bounds=(0, +np.inf))
     # expand fit space
-    x_fit = np.linspace(0, int(np.max(x_data) * 10), num=200)
+    x_fit = np.linspace(0, int(np.max(x_data) * 100), num=500)
     y_fit = MM(x_fit, *(best_fit_ab))
     # impute maximum saturation to plot as 95% of y_max
     y_val = best_fit_ab[0] * 0.95
