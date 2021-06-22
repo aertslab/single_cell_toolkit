@@ -176,14 +176,19 @@ def sub_sample_fragments(
         )["MeanFragmentsPerCB"][0]
 
         logger.info("Calculate median number of unique fragments per barcode.")
-        stats_bucket["median_uniq_frag_per_bc"][chunk] = fragments_sampled_for_good_bc_df.groupby(["CellBarcode", "Chromosome", "Start", "End"]).agg(
-            pl.col("FragmentCount").first().alias("UniqueFragmentsPerCB")
-        ).select([pl.col("CellBarcode"), pl.col("UniqueFragmentsPerCB")]
+        stats_bucket["median_uniq_frag_per_bc"][chunk] = fragments_sampled_for_good_bc_df.groupby(
+            ["CellBarcode", "Chromosome", "Start", "End"]
+        ).agg(
+            [pl.col("FragmentCount").first().alias("FragmentCount")]
+        ).select(
+            [pl.col("CellBarcode"), pl.col("FragmentCount")]
         ).groupby("CellBarcode").agg(
-            pl.col("UniqueFragmentsPerCB").count().alias("UniqueFragmentsPerCB")
+            pl.col("FragmentCount").count().alias("UniqueFragmentsPerCB")
         ).select(
             pl.col("UniqueFragmentsPerCB").median()
         )["UniqueFragmentsPerCB"][0]
+
+        logger.info("Calculate median number of unique fragments per barcode finished.")
 
         stats_bucket["cell_barcode_count"][chunk] = nbr_good_cell_barcodes
 
