@@ -130,15 +130,17 @@ def sub_sample_fragments(
         },  # number of barcodes with n_reads > min_uniq_frag
     }
 
+    # Get all cell barcodes which have more than min_uniq_frag fragments.
     good_cell_barcodes = fragments_df.groupby("CellBarcode").agg(
         pl.col("FragmentCount").count().alias('nbr_frags_per_CBs')
     ).filter(
         pl.col("nbr_frags_per_CBs") > min_uniq_frag
     )
 
+    # Count all good cell barcodes.
     nbr_good_cell_barcodes = good_cell_barcodes.height
 
-    # Create dataframe where each row contain one fragment:
+    # Create dataframe where each row contains one fragment:
     #   - Original dataframe has a count per fragment with the same cell barcode.
     #   - Create a row for each count, so we can sample fairly afterwards.
     fragments_all_df = fragments_df.with_column(
@@ -152,21 +154,19 @@ def sub_sample_fragments(
 
         logger.info(f"Random sample: {fraction}")
 
-        # Sample all fragments (with duplicates).
-        fragments_sampled_df = fragments_all_df.sample(frac=fraction)
-        stats_bucket["total_frag_count"][chunk] = fragments_sampled_df.height
+        # Sample x% from all fragments (with duplicates) and keep fragments which have good barcodes.
+        logger.info(f"Sample {fraction * 100.0}% from all fragments and keep fragments with good barcodes.")
+        fragments_sampled_for_good_bc_df = good_cell_barcodes.join(
+            fragments_all_df.sample(frac=fraction),
+            left_on="CellBarcode",
+            right_on="CellBarcode",
+            how="left"
+        )
 
-        logger.info(f"Get good barcodes from Random sample: {fraction}")
-        fragments_sampled_for_good_bc_df = good_cell_barcodes.join(fragments_all_df.sample(frac=fraction), left_on="CellBarcode", right_on="CellBarcode", how="left")
-        #fragments_sampled_for_good_bc_df = good_cell_barcodes.join(fragments_sampled_df, left_on="CellBarcode", right_on="CellBarcode", how="left")
-
-        # Get number of sampled fragments (with possible duplicate fragments).
-        #stats_bucket["total_frag_count_bc_filtered"][chunk] = fragments_sampled_for_good_bc_df.height
-
-        # fragments_all_df.groupby(["CellBarcode", "Chromosome", "Start", "End"]).agg(pl.col('FragmentCount').count()).filter(pl.col("FragmentCount_count") >= 3).filter(pl.col("CellBarcode") == "TTTACGAAGATGGACA-1")
+        # Get number of sampled fragments (with possible duplicate fragments) which have good barcodes.
+        stats_bucket["total_frag_count"][chunk] = fragments_sampled_for_good_bc_df.height
 
         logger.info("Calculate mean number of fragments per barcode.")
-        # Calculate mean number of fragments per barcode.
         stats_bucket["mean_frag_per_bc"][chunk] = fragments_sampled_for_good_bc_df.select(
             [pl.col('CellBarcode'), pl.col('FragmentCount')]
         ).groupby("CellBarcode").agg(
