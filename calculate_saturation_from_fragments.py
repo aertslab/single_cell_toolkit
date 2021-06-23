@@ -192,6 +192,9 @@ def sub_sample_fragments(
 
         stats_df.loc[1.0, "cell_barcode_count"] = nbr_good_cell_barcodes
 
+        # Delete dataframe to free memory.
+        del fragments_for_good_bc_df
+
     # Create dataframe where each row contains one fragment:
     #   - Original dataframe has a count per fragment with the same cell barcode.
     #   - Create a row for each count, so we can sample fairly afterwards.
@@ -200,6 +203,9 @@ def sub_sample_fragments(
             pl.col("FragmentCount")
         )
     ).explode("FragmentCount")
+
+    # Delete input dataframe to free memory.
+    del fragments_df
 
     for sampling_fraction in sampling_fractions:
         if sampling_fraction == 0.0:
@@ -250,6 +256,8 @@ def sub_sample_fragments(
 
         stats_df.loc[sampling_fraction, "cell_barcode_count"] = nbr_good_cell_barcodes
 
+        # Delete dataframe to free memory.
+        del fragments_sampled_for_good_bc_df
 
     logger.info(f'Saving statistics in "{stats_tsv_filename}".')
     stats_df.to_csv(stats_tsv_filename, sep="\t")
