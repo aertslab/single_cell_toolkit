@@ -18,7 +18,7 @@ from collections.abc import Sequence
 import polars as pl
 
 
-__author__ = "Swan Floc’Hlay"
+__author__ = "Swann Floc Hlay"
 __contributors__ = "Gert Hulselmans"
 __version__ = "v0.2.0"
 
@@ -266,16 +266,28 @@ def sub_sample_fragments(
     return stats_df
 
 
+# Format axis labels
+def format_axis(text):
+    format_dict = {
+        "mean_frag_per_bc": "Mean fragments / barcode",
+        "median_uniq_frag_per_bc": "Median unique fragments / barcode",
+        "total_frag_count": "Total fragment count"
+    }
+    for i, j in format_dict.items():
+        text = text.replace(i, j)
+    return text
+
+
 # MM-fit function
 def fit_MM(
     stats_df,
     percentages=[0.3, 0.6, 0.9],
-    path_to_fig="./",
+    saturation_plot_filename="saturation.png",
     x_axis="total_frag_count",
     y_axis="median_uniq_frag_per_bc",
 ):
     # select x/y data fro MM fit from subsampling stats
-    x_data = np.array(stats_df.loc[:, x_axis])
+    x_data = np.array(stats_df.loc[:, x_axis]) / 10**6
     y_data = np.array(stats_df.loc[:, y_axis])
     # fit to MM function
     best_fit_ab, covar = curve_fit(MM, x_data, y_data, bounds=(0, +np.inf))
@@ -303,7 +315,7 @@ def fit_MM(
         x=x_fit[-1],
         y=y_coef,
         s=str(round(100 * max(y_data) / best_fit_ab[0]))
-        + "% {:.2e}".format(round(x_coef)),
+        + "% {:.2f}".format(x_coef),
         c="crimson",
         ha="right",
         va="bottom",
@@ -325,15 +337,16 @@ def fit_MM(
             plt.text(
                 x=x_fit[-1],
                 y=y_coef,
-                s=str(round(100 * perc)) + "% {:.2e}".format(round(x_coef)),
+                s=str(round(100 * perc)) + "% {:.2f}".format(x_coef),
                 c="grey",
                 ha="right",
                 va="bottom",
             )
     # save figure
-    plt.xlabel(x_axis)
-    plt.ylabel(y_axis)
-    plt.savefig(path_to_fig)
+    plt.xlabel(format_axis(x_axis) + " (millions)")
+    plt.ylabel(format_axis(y_axis))
+    plt.title(os.path.basename(saturation_plot_filename).replace(".saturation.png",""))
+    plt.savefig(saturation_plot_filename)
     plt.close()
 
 
@@ -375,7 +388,7 @@ def main():
         "--min_frags_per_cb",
         dest="min_frags_per_cb",
         type=int,
-        help="Minimum number of unique fragments per cell barcodes",
+        help="Minimum number of unique fragments per cell barcodes. Default: 200",
         default=200,
     )
     parser.add_argument(
@@ -425,7 +438,7 @@ def main():
     fit_MM(
         stats_df,
         percentages=percentages,
-        path_to_fig=args.output_prefix + ".saturation.png",
+        saturation_plot_filename=args.output_prefix + ".saturation.png",
         x_axis="total_frag_count",
         y_axis="median_uniq_frag_per_bc",
     )
