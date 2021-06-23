@@ -198,6 +198,7 @@ def sub_sample_fragments(
     # Create dataframe where each row contains one fragment:
     #   - Original dataframe has a count per fragment with the same cell barcode.
     #   - Create a row for each count, so we can sample fairly afterwards.
+    logger.info("Create dataframe with all fragments (for sampling).")
     fragments_all_df = fragments_df.with_column(
         pl.col("FragmentCount").repeat_by(
             pl.col("FragmentCount")
@@ -218,8 +219,10 @@ def sub_sample_fragments(
             # calculations of the median number of unique fragments per barcode.
             continue
 
+        logger.info(f"Calculate statistics for sampling fraction {round(sampling_fraction * 100, 1)}%.")
+
         # Sample x% from all fragments (with duplicates) and keep fragments which have good barcodes.
-        logger.info(f"Sample {sampling_fraction * 100.0}% from all fragments and keep fragments with good barcodes.")
+        logger.info(f"Sample {round(sampling_fraction * 100, 1)}% from all fragments and keep fragments with good barcodes.")
         fragments_sampled_for_good_bc_df = good_cell_barcodes.join(
             fragments_all_df.sample(frac=sampling_fraction),
             left_on="CellBarcode",
@@ -251,8 +254,6 @@ def sub_sample_fragments(
         ).select(
             pl.col("UniqueFragmentsPerCB").median()
         )["UniqueFragmentsPerCB"][0]
-
-        logger.info("Calculate median number of unique fragments per barcode finished.")
 
         stats_df.loc[sampling_fraction, "cell_barcode_count"] = nbr_good_cell_barcodes
 
