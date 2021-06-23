@@ -128,7 +128,7 @@ def sub_sample_fragments(
     fragments_df,
     min_uniq_frag=200,
     sampling_fractions=sampling_fractions_default,
-    outfile="sampling_stats.tab",
+    stats_tsv_filename="sampling_stats.tsv",
     whitelist=None,
 ):
     sampling_fractions_length = len(sampling_fractions)
@@ -202,10 +202,9 @@ def sub_sample_fragments(
 
         stats_df.loc[sampling_fraction, "cell_barcode_count"] = nbr_good_cell_barcodes
 
-    logger.info("Save data as tab file.")
 
-    # Save statistics as TSV file.
-    stats_df.to_csv(outfile, sep="\t")
+    logger.info(f'Saving statistics in "{stats_tsv_filename}".')
+    stats_df.to_csv(stats_tsv_filename, sep="\t")
 
     return stats_df
 
@@ -360,7 +359,7 @@ def main():
         fragments_df,
         min_uniq_frag=args.min_frags_per_cb,
         sampling_fractions=sampling_fractions,
-        outfile=args.output_prefix + ".sampling_stats.tsv",
+        stats_tsv_filename=args.output_prefix + ".sampling_stats.tsv",
         whitelist=args.whitelist,
     )
 
