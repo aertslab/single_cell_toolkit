@@ -28,6 +28,18 @@ logging.basicConfig(format=FORMAT, level=logging.INFO)
 logger = logging.getLogger('calculate_saturation_from_fragments')
 
 
+# Fractions for which to sample from the fragments file:
+#     [
+#         float(f'{sampling_fraction:0.2f}')
+#         for sampling_fraction in list(np.concatenate((np.arange(0.0, 0.1, 0.01), np.arange(0.1, 0.5, 0.05), np.arange(0.5, 1.01, 0.1))))
+#     ]
+sampling_fractions_default = [
+    0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09,
+    0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45,
+    0.5, 0.6, 0.7, 0.8, 0.9, 1.0
+]
+
+
 ### initialise function and classes
 
 
@@ -115,20 +127,22 @@ def MM(x, Vmax, Km):
 def sub_sample_fragments(
     fragments_df,
     min_uniq_frag=200,
-    n_chunk=10,
+    sampling_fractions=sampling_fractions_default,
     outfile="sampling_stats.tab",
     whitelist=None,
 ):
-    # init stats bucket
-    stats_bucket = {
-        "mean_frag_per_bc": {"chunk 0": 0},  # mean read per cell
-        "median_uniq_frag_per_bc": {"chunk 0": 0},  # median uniq fragment per cell
-        "total_frag_count": {"chunk 0": 0},  # total read count (all barcodes)
-        #"total_frag_count_bc_filtered": {"chunk 0": 0},
-        "cell_barcode_count": {
-            "chunk 0": 0
-        },  # number of barcodes with n_reads > min_uniq_frag
-    }
+    sampling_fractions_length = len(sampling_fractions)
+
+    # Initialize dataframe for storing all statistics results.
+    stats_df = pd.DataFrame(
+        {
+            "mean_frag_per_bc": np.zeros(sampling_fractions_length, np.float64),
+            "median_uniq_frag_per_bc": np.zeros(sampling_fractions_length, np.float64),
+            "total_frag_count": np.zeros(sampling_fractions_length, np.uint32),
+            "cell_barcode_count": np.zeros(sampling_fractions_length, np.uint32),
+        },
+        index=pd.Index(data=np.array(sampling_fractions), name="sampling_fraction"),
+    )
 
     # Get all cell barcodes which have more than min_uniq_frag fragments.
     good_cell_barcodes = fragments_df.groupby("CellBarcode").agg(
@@ -149,25 +163,21 @@ def sub_sample_fragments(
         )
     ).explode("FragmentCount")
 
-    for fraction in np.arange(0.1, 1.1, 0.1):
-        chunk = "chunk " + str(int(fraction * 10))
-
-        logger.info(f"Random sample: {fraction}")
-
+    for sampling_fraction in sampling_fractions:
         # Sample x% from all fragments (with duplicates) and keep fragments which have good barcodes.
-        logger.info(f"Sample {fraction * 100.0}% from all fragments and keep fragments with good barcodes.")
+        logger.info(f"Sample {sampling_fraction * 100.0}% from all fragments and keep fragments with good barcodes.")
         fragments_sampled_for_good_bc_df = good_cell_barcodes.join(
-            fragments_all_df.sample(frac=fraction),
+            fragments_all_df.sample(frac=sampling_fraction),
             left_on="CellBarcode",
             right_on="CellBarcode",
             how="left"
         )
 
         # Get number of sampled fragments (with possible duplicate fragments) which have good barcodes.
-        stats_bucket["total_frag_count"][chunk] = fragments_sampled_for_good_bc_df.height
+        stats_df.loc[sampling_fraction, "total_frag_count"] = fragments_sampled_for_good_bc_df.height
 
         logger.info("Calculate mean number of fragments per barcode.")
-        stats_bucket["mean_frag_per_bc"][chunk] = fragments_sampled_for_good_bc_df.select(
+        stats_df.loc[sampling_fraction, "mean_frag_per_bc"] = fragments_sampled_for_good_bc_df.select(
             [pl.col('CellBarcode'), pl.col('FragmentCount')]
         ).groupby("CellBarcode").agg(
             [pl.count("FragmentCount").alias("FragmentsPerCB")]
@@ -176,7 +186,7 @@ def sub_sample_fragments(
         )["MeanFragmentsPerCB"][0]
 
         logger.info("Calculate median number of unique fragments per barcode.")
-        stats_bucket["median_uniq_frag_per_bc"][chunk] = fragments_sampled_for_good_bc_df.groupby(
+        stats_df.loc[sampling_fraction, "median_uniq_frag_per_bc"] = fragments_sampled_for_good_bc_df.groupby(
             ["CellBarcode", "Chromosome", "Start", "End"]
         ).agg(
             [pl.col("FragmentCount").first().alias("FragmentCount")]
@@ -190,27 +200,27 @@ def sub_sample_fragments(
 
         logger.info("Calculate median number of unique fragments per barcode finished.")
 
-        stats_bucket["cell_barcode_count"][chunk] = nbr_good_cell_barcodes
+        stats_df.loc[sampling_fraction, "cell_barcode_count"] = nbr_good_cell_barcodes
 
     logger.info("Save data as tab file.")
 
-    # Save data as tab file
-    stats_bucket = pd.DataFrame(stats_bucket)
-    stats_bucket.to_csv(outfile, sep="\t")
-    return stats_bucket
+    # Save statistics as TSV file.
+    stats_df.to_csv(outfile, sep="\t")
+
+    return stats_df
 
 
 # MM-fit function
 def fit_MM(
-    stat_bucket,
+    stats_df,
     percentages=[0.3, 0.6, 0.9],
     path_to_fig="./",
     x_axis="total_frag_count",
     y_axis="median_uniq_frag_per_bc",
 ):
     # select x/y data fro MM fit from subsampling stats
-    x_data = np.array(stat_bucket.loc[:, x_axis])
-    y_data = np.array(stat_bucket.loc[:, y_axis])
+    x_data = np.array(stats_df.loc[:, x_axis])
+    y_data = np.array(stats_df.loc[:, y_axis])
     # fit to MM function
     best_fit_ab, covar = curve_fit(MM, x_data, y_data, bounds=(0, +np.inf))
     # expand fit space
@@ -272,6 +282,8 @@ def fit_MM(
 
 
 def main():
+    sampling_fractions_default_str = ",".join([str(x) for x in sampling_fractions_default])
+
     parser = argparse.ArgumentParser(
         description="Infer saturation of scATAC from fragments file."
     )
@@ -312,11 +324,11 @@ def main():
     )
     parser.add_argument(
         "-s",
-        "--subsamplings",
-        dest="subsamplings",
-        type=int,
-        help="Number of sub-samplings to perform.",
-        default=10,
+        "--sampling_fractions",
+        dest="sampling_fractions",
+        type=str,
+        help=f'Fractions at which to perform the sub-samplings. Default: "{sampling_fractions_default_str}"',
+        default=sampling_fractions_default_str,
     )
     parser.add_argument(
         "-w",
@@ -331,6 +343,7 @@ def main():
 
     args = parser.parse_args()
 
+    sampling_fractions = [float(x) for x in args.sampling_fractions.split(",")]
     percentages = [float(x) for x in args.percentages.split(",")]
 
 
@@ -343,10 +356,10 @@ def main():
     logger.info("Loading fragments BED file finished.")
 
     # Sub-sample.
-    stats_bucket = sub_sample_fragments(
+    stats_df = sub_sample_fragments(
         fragments_df,
         min_uniq_frag=args.min_frags_per_cb,
-        n_chunk=args.subsamplings,
+        sampling_fractions=sampling_fractions,
         outfile=args.output_prefix + ".sampling_stats.tsv",
         whitelist=args.whitelist,
     )
@@ -354,7 +367,7 @@ def main():
     logger.info("fit_MM.")
     # Fit'n'plot for total count.
     fit_MM(
-        stats_bucket,
+        stats_df,
         percentages=percentages,
         path_to_fig=args.output_prefix + ".saturation.png",
         x_axis="total_frag_count",
