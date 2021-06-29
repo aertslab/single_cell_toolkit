@@ -25,7 +25,7 @@ correct_barcode_in_fastq () {
     local first_barcode='';
 
     # Read first barcode from barcode whitelist file.
-    if [ "${bc_whitelist_filename%.gz}" == "{bc_whitelist_filename}" ] ; then
+    if [ "${bc_whitelist_filename%.gz}" == "${bc_whitelist_filename}" ] ; then
         # Uncompressed file.
         read -r first_barcode < "${bc_whitelist_filename}";
     else
