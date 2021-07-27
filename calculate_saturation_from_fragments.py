@@ -96,7 +96,7 @@ def read_bc_and_counts_from_fragments_file(fragments_bed_filename: str) -> pl.Da
         has_headers=False,
         skip_rows=skip_rows,
         sep='\t',
-        use_pyarrow=True,
+        use_pyarrow=False,
         columns=["column_1", "column_2", "column_3", "column_4", "column_5"],
         new_columns=["Chromosome", "Start", "End", "CellBarcode", "FragmentCount"],
     ).with_columns(
@@ -417,7 +417,7 @@ def main():
 
 
     # Enable global string cache.
-    pl.frame.toggle_string_cache(True)
+    pl.toggle_string_cache(True)
 
     # Load fragments BED file.
     logger.info("Loading fragments BED file started.")
