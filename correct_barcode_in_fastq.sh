@@ -1,14 +1,18 @@
 #!/bin/bash
 
+set -eo pipefail
+
+
 
 correct_barcode_in_fastq () {
     local bc_whitelist_filename="${1}";
     local fastq_with_raw_bc_filename="${2}";
     local fastq_with_corrected_bc_filename="${3}";
     local max_mismatches="${4:-1}";
+    local min_frac_bcs_to_find="${5:-0.5}";
 
     if [ ${#@} -lt 3 ] ; then
-        printf 'Usage: correct_barcode_in_fastq bc_whitelist_file fastq_with_raw_bc_file fastq_with_corrected_bc_file max_mismatches\n';
+        printf 'Usage: correct_barcode_in_fastq bc_whitelist_file fastq_with_raw_bc_file fastq_with_corrected_bc_file [max_mismatches] [min_frac_bcs_to_find]\n';
         return 1;
     fi
 
@@ -56,6 +60,7 @@ correct_barcode_in_fastq () {
             "/dev/stdout" \
             "${fastq_with_corrected_bc_filename}.corrected.bc_stats.tsv" \
             "${max_mismatches}" \
+            "${min_frac_bcs_to_find}" \
       | pigz -p 4 \
       > "${fastq_with_corrected_bc_filename}";
 }

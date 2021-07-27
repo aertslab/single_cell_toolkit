@@ -8,8 +8,11 @@ from seq_lib.barcode_correction import read_barcode_whitelist_from_file, Correct
 # bc_length needs to be passed when invoking seqc: "seqc run -D bc_length=16 -release correct_barcode_in_fastq.seq"
 K = Kmer[bc_length]
 
+# Minimum percentage of barcodes that should be found before returning with an error.
+min_frac_bcs_to_find_default = 0.5
 
-def correct_bc_in_fastq(bc_whitelist: set[K], fastq_with_raw_bc_filename: str, fastq_with_corrected_bc_filename: str, corrected_bc_stats_tsv_filename: str, max_hamming_dist: int = 1):
+
+def correct_bc_in_fastq(bc_whitelist: set[K], fastq_with_raw_bc_filename: str, fastq_with_corrected_bc_filename: str, corrected_bc_stats_tsv_filename: str, max_hamming_dist: int = 1, min_frac_bcs_to_find: float = min_frac_bcs_to_find_default):
     """
     Read FASTQ file with barcodes and append " CB:Z:corrected_barcode" to the FASTQ record comment
     if the barcode matches the whitelist (exact match or 1 mismatch).
@@ -80,9 +83,18 @@ def correct_bc_in_fastq(bc_whitelist: set[K], fastq_with_raw_bc_filename: str, f
             f'nbr_bc_uncorrected\t{nbr_reads - sum(nbr_bc_mismatches)}\n'
         )
 
+    # Calculate fraction of barcodes found in all reads.
+    frac_bcs_found = float(sum(nbr_bc_mismatches)) / float(nbr_reads)
 
-if len(sys.argv) != 6:
-    sys.stderr.write(f'Usage: seqc run -D bc_length={bc_length} -release {sys.argv[0]} bc_whitelist_file fastq_with_raw_bc_file fastq_with_corrected_bc_file corrected_bc_stats_file max_mismatches\n')
+    # Return if enough barcodes where found and the fraction of barcodes found in all reads.
+    return (frac_bcs_found >= min_frac_bcs_to_find), frac_bcs_found
+
+
+if len(sys.argv) < 6:
+    print(
+        f'Usage: seqc run -D bc_length={bc_length} -release {sys.argv[0]} bc_whitelist_file fastq_with_raw_bc_file fastq_with_corrected_bc_file corrected_bc_stats_file max_mismatches [min_frac_bcs_to_find]',
+        file=sys.stderr
+    )
     sys.exit(1)
 else:
     bc_whitelist_filename = sys.argv[1]
@@ -90,6 +102,7 @@ else:
     fastq_with_corrected_bc_filename = sys.argv[3]
     corrected_bc_stats_tsv_filename = sys.argv[4]
     max_mismatches = int(sys.argv[5])
+    min_frac_bcs_to_find = float(sys.argv[6]) if len(sys.argv) == 7 else min_frac_bcs_to_find_default
 
     # Read whitelisted barcodes from file and convert to a set of Kmers.
     bc_whitelist = read_barcode_whitelist_from_file[K](
@@ -100,10 +113,20 @@ else:
 
     # Read FASTQ with barcodes and write a FASTQ with corrected barcodes for barcodes that
     # match the whitelist of barcodes closely enough, else write the original barcodes.
-    correct_bc_in_fastq(
+    enough_bcs_found, frac_bcs_found = correct_bc_in_fastq(
         bc_whitelist=bc_whitelist,
         fastq_with_raw_bc_filename=fastq_with_raw_bc_filename,
         fastq_with_corrected_bc_filename=fastq_with_corrected_bc_filename,
         corrected_bc_stats_tsv_filename=corrected_bc_stats_tsv_filename,
-        max_hamming_dist=max_mismatches
+        max_hamming_dist=max_mismatches,
+        min_frac_bcs_to_find=min_frac_bcs_to_find
     )
+
+    if not enough_bcs_found:
+        print(
+            f'Warning: Only {frac_bcs_found * 100.00}% of the reads have a barcode.',
+            '         Check if you provided the correct barcode whitelist file (might need reverse complement).\n',
+            sep='\n',
+            file=sys.stderr
+        )
+        sys.exit(1)
