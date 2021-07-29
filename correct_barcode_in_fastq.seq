@@ -2,6 +2,7 @@ import bio
 import gzip
 import sys
 
+from bio.kmer import Kmer
 from seq_lib.barcode_correction import read_barcode_whitelist_from_file, CorrectedBc, correct_bc_by_qual_order_with_whitelist, correct_bc_with_Ns_with_whitelist
 
 

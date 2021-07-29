@@ -1,6 +1,7 @@
 from bio import *
 import sys
 
+from bio.kmer import Kmer
 
 #
 # Written in seq.
