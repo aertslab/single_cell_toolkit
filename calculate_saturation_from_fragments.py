@@ -96,16 +96,17 @@ def read_bc_and_counts_from_fragments_file(fragments_bed_filename: str) -> pl.Da
         has_headers=False,
         skip_rows=skip_rows,
         sep='\t',
-        use_pyarrow=True,
+        use_pyarrow=False,
+        n_threads=6,
         columns=["column_1", "column_2", "column_3", "column_4", "column_5"],
         new_columns=["Chromosome", "Start", "End", "CellBarcode", "FragmentCount"],
     ).with_columns(
         [
             pl.col("Chromosome").cast(pl.Categorical),
-            pl.col("Start").cast(pl.Int32),
-            pl.col("End").cast(pl.Int32),
+            pl.col("Start").cast(pl.UInt32),
+            pl.col("End").cast(pl.UInt32),
             pl.col("CellBarcode").cast(pl.Categorical),
-            pl.col("FragmentCount").cast(pl.Int32),
+            pl.col("FragmentCount").cast(pl.UInt32),
         ]
     )
 
