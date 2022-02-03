@@ -15,8 +15,8 @@ import numpy as np
 import argparse
 
 __author__ = "Jasper Janssens"
-__contributors__ = "Swan Floc’Hlay, Maxime De Waegeneer, Gert Hulselmans"
-__version__ = "v0.2.0"
+__contributors__ = "Swan Floc’Hlay, Maxime De Waegeneer, Gert Hulselmans, Kristofer Davie"
+__version__ = "v0.2.1"
 __contact__ = "jasper.janssens@kuleuven.be"
 
 
