@@ -218,7 +218,10 @@ def plot_saturation_curve(
             wrap=True,
         )
 
-    saturation_pct = np.max(y_data) / model_fit[0]
+    if model_fit[0] > 1:
+        saturation_pct = np.max(y_data) / model_fit[0]
+    else:
+        saturation_pct = np.max(y_data)
     mean_reads_per_cell = drawline(
         perc=saturation_pct,
         coef=model_fit,
