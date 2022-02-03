@@ -383,30 +383,32 @@ def main():
         output_path = Path(args.output) / f"{project_name}_complexity.png"
 
     elif args.assay_type == "RNA":
-        summary_info_path = (
+        metrics_dir = (
+            Path(args.tenx_dir)
+            / "SC_RNA_COUNTER_CS"
+            / "SC_MULTI_CORE"
+            / "MULTI_REPORTER"
+            / "SUMMARIZE_REPORTS"
+            / "fork0"
+            / "files"
+        )
+        if not os.path.exists(metrics_dir):
+            metrics_dir = (
             Path(args.tenx_dir)
             / "SC_RNA_COUNTER_CS"
             / "SC_RNA_COUNTER"
             / "SUMMARIZE_REPORTS"
             / "fork0"
             / "files"
-            / "metrics_summary_csv.csv"
         )
+        summary_info_path = metrics_dir / "metrics_summary_csv.csv"
+        complexity_info_path = metrics_dir / "metrics_summary_json.json"
         if not summary_info_path.exists():
             raise FileNotFoundError(
                 f"The summary info file of the given 10x {args.assay_type} folder {args.tenx_dir} does not exist."
             )
         summary = pd.read_csv(summary_info_path)
         num_cells = int(re.sub(",", "", summary["Estimated Number of Cells"][0]))
-        complexity_info_path = (
-            Path(args.tenx_dir)
-            / "SC_RNA_COUNTER_CS"
-            / "SC_RNA_COUNTER"
-            / "SUMMARIZE_REPORTS"
-            / "fork0"
-            / "files"
-            / "metrics_summary_json.json"
-        )
 
         # Create output path.
         project_name = "RNA"  # needs to be updated
