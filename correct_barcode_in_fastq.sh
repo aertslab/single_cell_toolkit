@@ -1,6 +1,7 @@
 #!/bin/bash
 
-set -eo pipefail
+set -e
+set -o pipefail
 
 
 
@@ -33,8 +34,14 @@ correct_barcode_in_fastq () {
         # Uncompressed file.
         read -r first_barcode < "${bc_whitelist_filename}";
     else
+        # Unset pipefail.
+        set +o pipefail
+
         # Gzip compressed file.
         first_barcode=$(zcat "${bc_whitelist_filename}" | head -n 1);
+
+        # Set pipefail.
+        set -o pipefail
     fi
 
     # Get length of first barcode.
