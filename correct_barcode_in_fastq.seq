@@ -48,8 +48,9 @@ def correct_bc_in_fastq(bc_whitelist: set[K], fastq_with_raw_bc_filename: str, f
             nbr_reads += 1
 
             corrected_bc = (
-                correct_bc_with_Ns_with_whitelist[K](
+                correct_bc_with_Ns_with_whitelist(
                     bc_whitelist,
+                    bc_length,
                     str(record.seq),
                     max_hamming_dist
                 )
@@ -74,7 +75,7 @@ def correct_bc_in_fastq(bc_whitelist: set[K], fastq_with_raw_bc_filename: str, f
 
     with open(corrected_bc_stats_tsv_filename, 'w') as corrected_bc_stats_tsv_fh:
         corrected_bc_stats_tsv_fh.write(
-            f'nbr_reads:\t{nbr_reads}\n' \
+            f'nbr_reads:\t{nbr_reads}\n' +
             f'total_bc_found\t{sum(nbr_bc_mismatches)}\n'
         )
         for i in range(0, max_hamming_dist + 1):
@@ -106,8 +107,9 @@ else:
     min_frac_bcs_to_find = float(sys.argv[6]) if len(sys.argv) == 7 else min_frac_bcs_to_find_default
 
     # Read whitelisted barcodes from file and convert to a set of Kmers.
-    bc_whitelist = read_barcode_whitelist_from_file[K](
+    bc_whitelist = read_barcode_whitelist_from_file(
         bc_whitelist_filename=bc_whitelist_filename,
+        bc_length=bc_length,
         bc_column_idx=0,
         warning=True
     )

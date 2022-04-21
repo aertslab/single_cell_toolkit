@@ -6,7 +6,7 @@ import sys
 from .utils import read_line_from_uncompressed_or_gzipped_file
 
 
-def read_barcode_whitelist_from_file[kmer_type](bc_whitelist_filename: str, bc_column_idx: int = 0, warning: bool=True):
+def read_barcode_whitelist_from_file(bc_whitelist_filename: str, bc_length: Static[int], bc_column_idx: int = 0, warning: bool=True):
     """
     Read whitelisted barcodes from file and convert to a set of Kmers.
     """
@@ -15,17 +15,17 @@ def read_barcode_whitelist_from_file[kmer_type](bc_whitelist_filename: str, bc_c
 
     for bc_line in read_line_from_uncompressed_or_gzipped_file(bc_whitelist_filename):
         bc_str = bc_line.strip().split('\t')[bc_column_idx]
-        bc_length = len(bc_str)
+        bc_length_current_line = len(bc_str)
 
-        if bc_length == 0 or bc_str[0] == '#':
+        if bc_length_current_line == 0 or bc_str[0] == '#':
             # Skip empty lines and lines that start with a comment.
             continue
 
-        if len(kmer_type()) != bc_length:
+        if bc_length != bc_length_current_line:
             # Skip barcodes if they have a different length than the Kmer length.
             if warning:
                 print(
-                    f'Warning: Barcode "{bc_str}" is skipped (barcode length of {bc_length} instead of requested {len(kmer_type())}).',
+                    f'Warning: Barcode "{bc_str}" is skipped (barcode length of {bc_length_current_line} instead of requested {bc_length}).',
                     file=sys.stderr
                 )
             continue
@@ -39,7 +39,7 @@ def read_barcode_whitelist_from_file[kmer_type](bc_whitelist_filename: str, bc_c
                 )
             continue
 
-        bc = kmer_type(seq(bc_str))
+        bc = Kmer[bc_length](seq(bc_str))
         bc_whitelist.add(bc)
 
     return bc_whitelist
@@ -287,7 +287,7 @@ def correct_bc_by_qual_order_with_whitelist(bc_whitelist, bc, qual, max_hamming_
     return None
 
 
-def correct_bc_with_Ns_with_whitelist[kmer_type](bc_whitelist, bc_with_Ns: str, max_hamming_dist: Optional[int]=None) -> Optional[CorrectedBc]:
+def correct_bc_with_Ns_with_whitelist(bc_whitelist, bc_length: Static[int], bc_with_Ns: str, max_hamming_dist: Optional[int]=None) -> Optional[CorrectedBc]:
     """
     Check if provided barcode with Ns matches the whitelist with up to max_hamming_dist (0, 1, 2 or 3) mismatches
     (only Ns will be corrected).
@@ -309,7 +309,7 @@ def correct_bc_with_Ns_with_whitelist[kmer_type](bc_whitelist, bc_with_Ns: str, 
         return None
 
     # Convert barcode with Ns to a kmer.
-    bc = kmer_type(bc_with_Ns.replace('N', 'A'))
+    bc = Kmer[bc_length](bc_with_Ns.replace('N', 'A'))
 
     if n_count == 1:
         for b in (k'A', k'C', k'G', k'T'):

@@ -592,17 +592,17 @@ def extract_and_correct_biorad_barcode_in_fastq(fastq_with_raw_bc_filename: str,
 
     with open(corrected_bc_stats_tsv_filename, 'w') as corrected_bc_stats_tsv_fh:
         corrected_bc_stats_tsv_fh.write(
-            f'nbr_reads:\t{nbr_reads}\n' \
-            f'nbr_reads_with_adapters_needed_to_find_bcs\t{nbr_reads_with_adapters_needed_to_find_bcs}\n' \
-            f'nbr_reads_with_bc1_0_mismatches\t\t{nbr_reads_with_bcs[0][1]}\n' \
-            f'nbr_reads_with_bc1_1_mismatch\t\t{nbr_reads_with_bcs[0][2]}\n' \
-            f'nbr_reads_with_bc1_uncorrectable\t\t{nbr_reads_with_bcs[0][0]}\n' \
-            f'nbr_reads_with_bc2_0_mismatches\t\t{nbr_reads_with_bcs[1][1]}\n' \
-            f'nbr_reads_with_bc2_1_mismatch\t\t{nbr_reads_with_bcs[1][2]}\n' \
-            f'nbr_reads_with_bc2_uncorrectable\t\t{nbr_reads_with_bcs[1][0]}\n' \
-            f'nbr_reads_with_bc3_0_mismatches\t\t{nbr_reads_with_bcs[2][1]}\n' \
-            f'nbr_reads_with_bc3_1_mismatch\t\t{nbr_reads_with_bcs[2][2]}\n' \
-            f'nbr_reads_with_bc3_uncorrectable\t\t{nbr_reads_with_bcs[2][0]}\n' \
+            f'nbr_reads:\t{nbr_reads}\n' +
+            f'nbr_reads_with_adapters_needed_to_find_bcs\t{nbr_reads_with_adapters_needed_to_find_bcs}\n' +
+            f'nbr_reads_with_bc1_0_mismatches\t\t{nbr_reads_with_bcs[0][1]}\n' +
+            f'nbr_reads_with_bc1_1_mismatch\t\t{nbr_reads_with_bcs[0][2]}\n' +
+            f'nbr_reads_with_bc1_uncorrectable\t\t{nbr_reads_with_bcs[0][0]}\n' +
+            f'nbr_reads_with_bc2_0_mismatches\t\t{nbr_reads_with_bcs[1][1]}\n' +
+            f'nbr_reads_with_bc2_1_mismatch\t\t{nbr_reads_with_bcs[1][2]}\n' +
+            f'nbr_reads_with_bc2_uncorrectable\t\t{nbr_reads_with_bcs[1][0]}\n' +
+            f'nbr_reads_with_bc3_0_mismatches\t\t{nbr_reads_with_bcs[2][1]}\n' +
+            f'nbr_reads_with_bc3_1_mismatch\t\t{nbr_reads_with_bcs[2][2]}\n' +
+            f'nbr_reads_with_bc3_uncorrectable\t\t{nbr_reads_with_bcs[2][0]}\n' +
             f'nbr_reads_with_bc1_bc2_bc3_correct_or_correctable\t{nbr_reads_with_bc1_bc2_bc3_correct_or_correctable}\n'
        )
 
