@@ -3,6 +3,8 @@
 # Copyright (C) 2022 - Gert Hulselmans
 
 
+from __future__ import annotations
+
 import argparse
 
 import polars as pl
@@ -12,7 +14,7 @@ def merge_cbs_over_jaccard_index_threshold(
     CB1_vs_CB2_jaccard_filtered_tsv_filename: str,
     input_fragments_tsv_filename: str,
     output_fragments_tsv_filename: str,
-):
+) -> None:
 
     # Read CB1 vs CB2 Jaccard CSV file filtered by Otsu threshold.
     CB1_vs_CB2_jaccard_filtered_df = pl.read_csv(
@@ -116,7 +118,7 @@ def merge_cbs_over_jaccard_index_threshold(
     )
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Merge CBs if they are over a precalculated Jaccard index threshold."
     )

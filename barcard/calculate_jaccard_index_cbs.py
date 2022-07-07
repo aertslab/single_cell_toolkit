@@ -3,6 +3,8 @@
 # Copyright (C) 2022 - Gert Hulselmans
 
 
+from __future__ import annotations
+
 import argparse
 
 import polars as pl
@@ -13,7 +15,7 @@ def calculate_jaccard_index_cbs(
     CB1_vs_CB2_jaccard_tsv_filename: str,
     min_frags_per_CB: int = 1000,
     chromosomes: str | None = None,
-):
+) -> None:
 
     print(f'Reading fragments file "{fragments_tsv_filename}" ...')
 
@@ -190,7 +192,7 @@ def calculate_jaccard_index_cbs(
     )
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Calculate Jaccard index for CB pairs based on their common fragments."
     )
