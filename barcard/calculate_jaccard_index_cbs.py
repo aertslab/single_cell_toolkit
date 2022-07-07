@@ -12,7 +12,11 @@ def calculate_jaccard_index_cbs(
     fragments_tsv_filename: str,
     CB1_vs_CB2_jaccard_tsv_filename: str,
     min_frags_per_CB: int = 1000,
+    chromosomes: str | None = None,
 ):
+
+    print(f'Reading fragments file "{fragments_tsv_filename}" ...')
+
     # Read fragments file, count number of fragments per CB and
     # keep only those fragments which have a CB above or equal to min_frags_per_CB threshold.
     fragments_df = (
@@ -31,6 +35,44 @@ def calculate_jaccard_index_cbs(
         .with_column(pl.col("CB").count().over("CB").alias("per_CB_count"))
         .filter(pl.col("per_CB_count") >= min_frags_per_CB)
     )
+
+    if chromosomes:
+        if chromosomes.find(",") != -1:
+            # Chromosomes names to keep were specified as a comma separated list.
+            chromosomes = chromosomes.split(",")
+        elif chromosomes.find(" ") != -1:
+            # Chromosomes names to keep were specified as a space separated list.
+            chromosomes = chromosomes.split(" ")
+
+        if isinstance(chromosomes, list):
+            chroms_to_keep = fragments_df.select(
+                # Get all chromosome names available in the fragments file.
+                pl.col("chrom").unique(),
+            ).filter(
+                # Only keep chromosomes available in the list.
+                pl.col("chrom")
+                .cast(pl.Utf8)
+                .is_in(chromosomes),
+            )
+        else:
+            # Assume chromosome names to keep is a regex.
+            chroms_to_keep = fragments_df.select(
+                # Get all chromosome names available in the fragments file.
+                pl.col("chrom").unique(),
+            ).filter(
+                pl.col("chrom").cast(pl.Utf8).str.contains(chromosomes),
+            )
+
+        print(
+            "Keeping chromosomes: "
+            + ", ".join(chroms_to_keep.get_column("chrom").sort().to_list())
+        )
+
+        print("Only keep fragments located on the requested chromosomes...")
+
+        fragments_df = fragments_df.join(chroms_to_keep, how="inner", on="chrom")
+
+    print("Calculate Jaccard index for CB pairs based on their common fragments ...")
 
     CB1_vs_CB2_jaccard_df = (
         fragments_df.lazy()
@@ -136,6 +178,11 @@ def calculate_jaccard_index_cbs(
         .collect()
     )
 
+    print(
+        "Write Jaccard index for CB pairs based on their common fragments to "
+        f'"{CB1_vs_CB2_jaccard_tsv_filename}" ...'
+    )
+
     # Write output to TSV file.
     CB1_vs_CB2_jaccard_df.write_csv(
         CB1_vs_CB2_jaccard_tsv_filename,
@@ -179,12 +226,28 @@ def main():
         help="Minimum number of fragments needed per CB. Default: 1000.",
     )
 
+    parser.add_argument(
+        "-c",
+        "--chromosomes",
+        dest="chromosomes",
+        action="store",
+        type=str,
+        required=False,
+        default=None,
+        help="Only use specified chromosome names. "
+        "Specify chromosomes to keep as a comma or space separated list "
+        '(e.g.: "chr1,chr2,chr3" or "chr1 chr2 chr3") or a regular expression '
+        '(e.g.: "^(chr)?([0-9]+|[XY])$"), or None to keep all chromosomes. '
+        "Default: None.",
+    )
+
     args = parser.parse_args()
 
     calculate_jaccard_index_cbs(
-        args.fragments_tsv_filename,
-        args.CB1_vs_CB2_jaccard_tsv_filename,
+        fragments_tsv_filename=args.fragments_tsv_filename,
+        CB1_vs_CB2_jaccard_tsv_filename=args.CB1_vs_CB2_jaccard_tsv_filename,
         min_frags_per_CB=args.min_frags_per_CB,
+        chromosomes=args.chromosomes,
     )
 
 
