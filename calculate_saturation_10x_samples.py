@@ -41,6 +41,15 @@ def prepare_data(complexity_info_path: Path, assay_type):
     # Open complexity file
     with open(complexity_info_path) as complexity_info_fh:
         complexity_info = json.load(complexity_info_fh)
+
+    try:
+        cellranger_version = int(re.sub("\.","",re.sub("cellranger-","",re.sub("arc-","",complexity_info['cellranger_version']))))
+        print("data was generated using cellranger version "+str(cellranger_version))
+    except:
+        print("unable to determine cellranger version")
+        print("falling back to old version")
+        cellranger_version = 0
+
     if assay_type.endswith("MULTIOME"):
         if assay_type == "ATAC_MULTIOME":
             key_prefix = 'multi_raw_reads_'
@@ -60,38 +69,53 @@ def prepare_data(complexity_info_path: Path, assay_type):
         y_data = np.array(saturation_data[1])
         return x_data, y_data
 
-    # delay this step until after multiome is processed.
-    complexity_info_df = pd.DataFrame(complexity_info)
-
     if assay_type == "ATAC":
+        complexity_info_df = pd.DataFrame(complexity_info)
         # get x data
         x_data = np.array(complexity_info_df["total_depth"])
         # get y data
         y_data = np.array(complexity_info_df["unique"])
         return x_data, y_data
+
     elif assay_type == "RNA":
-        subsampled_columns = [
-            x for x in complexity_info_df.columns if "multi_raw_rpc_" in x
-        ]
-        saturation_data = complexity_info_df[subsampled_columns].copy()
-        saturation_data = pd.DataFrame(saturation_data.max())
-        saturation_data.index = [
-            float(
-                re.sub(
-                    "multi_raw_rpc_", "", re.sub("_subsampled_duplication_frac", "", x)
-                )
+        if cellranger_version > 100:
+            key_prefix = 'multi_raw_rpc_'
+            saturation_data = get_saturation_data(
+                complexity_info,
+                key_prefix,
             )
-            for x in subsampled_columns
-        ]
-        saturation_data = saturation_data.loc[saturation_data[0] != 0].copy()
-        saturation_data = saturation_data.sort_values(by=0)
-        saturation_data = saturation_data.reset_index()
-        saturation_data.columns = [0, 1]
-        # get x data
-        x_data = np.array(saturation_data[0])
-        # get y data
-        y_data = np.array(saturation_data[1])
-        return x_data, y_data
+            saturation_data = saturation_data.loc[saturation_data[0] != 0].copy()
+            saturation_data = saturation_data.sort_values(by=0)
+            saturation_data = saturation_data.reset_index()
+            saturation_data.columns = [0, 1]
+            # get x data
+            x_data = np.array(saturation_data[0])
+            # get y data
+            y_data = np.array(saturation_data[1])
+            return x_data, y_data
+        else:
+            subsampled_columns = [
+                x for x in complexity_info_df.columns if "multi_raw_rpc_" in x
+            ]
+            saturation_data = complexity_info_df[subsampled_columns].copy()
+            saturation_data = pd.DataFrame(saturation_data.max())
+            saturation_data.index = [
+                float(
+                    re.sub(
+                        "multi_raw_rpc_", "", re.sub("_subsampled_duplication_frac", "", x)
+                    )
+                )
+                for x in subsampled_columns
+            ]
+            saturation_data = saturation_data.loc[saturation_data[0] != 0].copy()
+            saturation_data = saturation_data.sort_values(by=0)
+            saturation_data = saturation_data.reset_index()
+            saturation_data.columns = [0, 1]
+            # get x data
+            x_data = np.array(saturation_data[0])
+            # get y data
+            y_data = np.array(saturation_data[1])
+            return x_data, y_data
 
     else:
         raise Exception(f"Not a valid assay type: {assay_type}")
