@@ -15,10 +15,23 @@ import numpy as np
 import argparse
 
 __author__ = "Jasper Janssens"
-__contributors__ = "Swan Floc’Hlay, Maxime De Waegeneer, Gert Hulselmans, Kristofer Davie"
-__version__ = "v0.2.1"
+__contributors__ = "Swan Floc’Hlay, Maxime De Waegeneer, Gert Hulselmans, Kristofer Davie, Christopher Flerin"
+__version__ = "v0.3.0"
 __contact__ = "jasper.janssens@kuleuven.be"
 
+def get_saturation_data(complexity_info, key_prefix):
+    saturation_data = pd.DataFrame([
+        [ complexity_info[x] for x in complexity_info.keys() if key_prefix in x ]
+    ]).T
+    saturation_data.index = [
+        float(
+            re.sub(
+                key_prefix, "", re.sub("_subsampled_duplication_frac", "", x)
+            )
+        )
+        for x in complexity_info.keys() if key_prefix in x
+    ]
+    return saturation_data
 
 def prepare_data(complexity_info_path: Path, assay_type):
     """
@@ -28,6 +41,26 @@ def prepare_data(complexity_info_path: Path, assay_type):
     # Open complexity file
     with open(complexity_info_path) as complexity_info_fh:
         complexity_info = json.load(complexity_info_fh)
+    if assay_type.endswith("MULTIOME"):
+        if assay_type == "ATAC_MULTIOME":
+            key_prefix = 'multi_raw_reads_'
+        elif assay_type == "RNA_MULTIOME":
+            key_prefix = 'multi_raw_rpc_'
+        saturation_data = get_saturation_data(
+                complexity_info,
+                key_prefix
+                )
+        saturation_data = saturation_data.loc[saturation_data[0] != 0].copy()
+        saturation_data = saturation_data.sort_values(by=0)
+        saturation_data = saturation_data.reset_index()
+        saturation_data.columns = [0, 1]
+        # get x data
+        x_data = np.array(saturation_data[0])
+        # get y data
+        y_data = np.array(saturation_data[1])
+        return x_data, y_data
+
+    # delay this step until after multiome is processed.
     complexity_info_df = pd.DataFrame(complexity_info)
 
     if assay_type == "ATAC":
@@ -43,7 +76,7 @@ def prepare_data(complexity_info_path: Path, assay_type):
         saturation_data = complexity_info_df[subsampled_columns].copy()
         saturation_data = pd.DataFrame(saturation_data.max())
         saturation_data.index = [
-            np.float(
+            float(
                 re.sub(
                     "multi_raw_rpc_", "", re.sub("_subsampled_duplication_frac", "", x)
                 )
@@ -120,7 +153,7 @@ def drawline(
         y_val = int(y_val)
     elif assay_type == "RNA":
         y_val = perc
-        y_val = np.float(y_val)
+        y_val = float(y_val)
 
     # find x value at which fitted line surpasses y_val
     x_coef = np.where(y_fit >= y_val)[0][0]
@@ -305,8 +338,8 @@ def main():
         action="store",
         type=str,
         required=True,
-        choices=["RNA", "ATAC"],
-        help="Assay type: RNA/ATAC.",
+        choices=["RNA", "ATAC", "RNA_MULTIOME", "ATAC_MULTIOME"],
+        help="Assay type: RNA/ATAC/RNA_MULTIOME/ATAC_MULTIOME.",
     )
     parser.add_argument(
         "-o",
@@ -336,10 +369,13 @@ def main():
 
     if not os.path.isdir(args.output):
         os.mkdir(args.output)
+    tenx_path = Path(args.tenx_dir)
+    project_name = tenx_path.name
+    print(project_name)
 
     if args.assay_type == "ATAC":
         complexity_info_dir = (
-            Path(args.tenx_dir)
+            tenx_path
             / "SC_ATAC_COUNTER_CS"
             / "SC_ATAC_COUNTER"
             / "_SC_ATAC_METRIC_COLLECTOR"
@@ -354,7 +390,7 @@ def main():
         a = os.scandir(path=complexity_info_dir)
         file_path = [x.name for x in a if x.name.startswith("join-")]
         complexity_info_path = (
-            Path(args.tenx_dir)
+            tenx_path
             / "SC_ATAC_COUNTER_CS"
             / "SC_ATAC_COUNTER"
             / "_SC_ATAC_METRIC_COLLECTOR"
@@ -369,7 +405,7 @@ def main():
                 f"The complexity JSON file of the given 10x {args.assay_type} folder {args.tenx_dir} does not exist."
             )
 
-        summary_info_path = Path(args.tenx_dir) / "outs" / "summary.csv"
+        summary_info_path = tenx_path / "outs" / "summary.csv"
         if not summary_info_path.exists():
             raise FileNotFoundError(
                 f"The summary info file of the given 10x {args.assay_type} folder {args.tenx_dir} does not exist."
@@ -381,13 +417,10 @@ def main():
         complexity_info_path_stripping = re.sub(
             "/SC_ATAC_COUNTER_.*", "", str(complexity_info_path)
         )
-        complexity_info_path_stripping = re.split("/", complexity_info_path_stripping)
-        project_name = complexity_info_path_stripping[-1]
-        output_path = Path(args.output) / f"{project_name}_complexity.png"
 
     elif args.assay_type == "RNA":
         metrics_dir = (
-            Path(args.tenx_dir)
+            tenx_path
             / "SC_RNA_COUNTER_CS"
             / "SC_MULTI_CORE"
             / "MULTI_REPORTER"
@@ -397,7 +430,7 @@ def main():
         )
         if not os.path.exists(metrics_dir):
             metrics_dir = (
-            Path(args.tenx_dir)
+            tenx_path
             / "SC_RNA_COUNTER_CS"
             / "SC_RNA_COUNTER"
             / "SUMMARIZE_REPORTS"
@@ -413,13 +446,43 @@ def main():
         summary = pd.read_csv(summary_info_path)
         num_cells = int(re.sub(",", "", summary["Estimated Number of Cells"][0]))
 
-        # Create output path.
-        project_name = "RNA"  # needs to be updated
-        output_path = Path(args.output) / f"{project_name}_saturation.png"
+    elif args.assay_type.endswith("_MULTIOME"):
+        summary_info_path = Path(args.tenx_dir) / "outs" / "summary.csv"
+        if not summary_info_path.exists():
+            raise FileNotFoundError(
+                f"The summary info file of the given 10x {args.assay_type} folder {args.tenx_dir} does not exist."
+            )
+        summary = pd.read_csv(summary_info_path)
+        num_cells = int(summary["Estimated number of cells"])
+
+        for p in tenx_path.rglob("*"):
+            if p.name == "metrics_summary_json.json":
+                complexity_info_path = p
+                break
+        if not complexity_info_path.exists():
+            raise FileNotFoundError(
+                f"The complexity JSON file of the given 10x {args.assay_type} folder {args.tenx_path} does not exist."
+            )
+
+    if args.assay_type in ['RNA','RNA_MULTIOME','ATAC_MULTIOME']:
+          output_path = Path(args.output) / f"{project_name}_{args.assay_type}_saturation.png"
+          output_path_tsv = Path(args.output) / f"{project_name}_{args.assay_type}_saturation.tsv"
+
+    elif args.assay_type in ['ATAC']:
+            output_path = Path(args.output) / f"{project_name}_{args.assay_type}_complexity.png"
+            output_path_tsv = Path(args.output) / f"{project_name}_{args.assay_type}_complexity.tsv"
 
     x_data, y_data = prepare_data(
         complexity_info_path=complexity_info_path, assay_type=args.assay_type
     )
+
+    if(args.assay_type == "RNA_MULTIOME"):
+        # use "RNA" assay type for all downstream steps:
+        args.assay_type = "RNA"
+    if(args.assay_type == "ATAC_MULTIOME"):
+        # use "RNA" assay type for all downstream steps (also based on saturation instead of lib complexity):
+        args.assay_type = "RNA"
+
     best_model_fit, best_model_fit_params, r_sq = fit_model(
         model=MM, x_data=x_data, y_data=y_data
     )
@@ -469,14 +532,9 @@ def main():
     )
 
     # Save summary.
-    if args.assay_type == "ATAC":
-        reads_summary.to_csv(
-            Path(args.output) / f"{project_name}_complexity.tsv", sep="\t"
-        )
-    elif args.assay_type == "RNA":
-        reads_summary.to_csv(
-            Path(args.output) / f"{project_name}_saturation.tsv", sep="\t"
-        )
+    reads_summary.to_csv(
+        output_path_tsv, sep="\t"
+    )
 
     print(f"Done.")
 
