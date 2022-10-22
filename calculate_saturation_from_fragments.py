@@ -170,20 +170,25 @@ def sub_sample_fragments(
             [pl.col("FragmentCount").sum().alias("TotalFragCount")]
         )["TotalFragCount"][0]
 
-        logger.info("Calculate mean number of fragments per barcode.")
-        stats_df.loc[1.0, "mean_frag_per_bc"] = fragments_for_good_bc_df.groupby("CellBarcode").agg(
-            [pl.col("FragmentCount").sum().alias("MeanFragmentsPerCB")]
-        ).select(
-            [pl.col("MeanFragmentsPerCB").mean()]
-        )["MeanFragmentsPerCB"][0]
+        logger.info("Calculate mean number of fragments per barcode and median number of unique fragments per barcode.")
+        stats_df_pl = (
+            fragments_for_good_bc_df.groupby("CellBarcode")
+            .agg(
+                [
+                    pl.col("FragmentCount").sum().alias("MeanFragmentsPerCB"),
+                    pl.count().alias("UniqueFragmentsPerCB"),
+                ]
+            )
+            .select(
+                [
+                    pl.col("MeanFragmentsPerCB").mean(),
+                    pl.col("UniqueFragmentsPerCB").median(),
+                ]
+            )
+        )
 
-        logger.info("Calculate median number of unique fragments per barcode.")
-        stats_df.loc[1.0, "median_uniq_frag_per_bc"] = fragments_for_good_bc_df.groupby("CellBarcode").agg(
-            pl.col("FragmentCount").count().alias("UniqueFragmentsPerCB")
-        ).select(
-            pl.col("UniqueFragmentsPerCB").median()
-        )["UniqueFragmentsPerCB"][0]
-
+        stats_df.loc[1.0, "mean_frag_per_bc"] = stats_df_pl["MeanFragmentsPerCB"][0]
+        stats_df.loc[1.0, "median_uniq_frag_per_bc"] = stats_df_pl["UniqueFragmentsPerCB"][0]
         stats_df.loc[1.0, "cell_barcode_count"] = nbr_good_cell_barcodes
 
         # Delete dataframe to free memory.
