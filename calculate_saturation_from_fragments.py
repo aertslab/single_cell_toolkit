@@ -93,21 +93,14 @@ def read_bc_and_counts_from_fragments_file(fragments_bed_filename: str) -> pl.Da
     # Read cell barcode (column 4) and counts (column 5) per fragemnt from fragments BED file.
     fragments_df = pl.read_csv(
         fragments_bed_filename,
-        has_headers=False,
+        has_header=False,
         skip_rows=skip_rows,
         sep='\t',
         use_pyarrow=False,
         n_threads=6,
         columns=["column_1", "column_2", "column_3", "column_4", "column_5"],
         new_columns=["Chromosome", "Start", "End", "CellBarcode", "FragmentCount"],
-    ).with_columns(
-        [
-            pl.col("Chromosome").cast(pl.Categorical),
-            pl.col("Start").cast(pl.UInt32),
-            pl.col("End").cast(pl.UInt32),
-            pl.col("CellBarcode").cast(pl.Categorical),
-            pl.col("FragmentCount").cast(pl.UInt32),
-        ]
+        dtypes=[pl.Categorical, pl.UInt32, pl.UInt32, pl.Categorical, pl.UInt32]
     )
 
     return fragments_df
