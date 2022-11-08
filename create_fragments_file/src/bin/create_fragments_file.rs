@@ -22,18 +22,19 @@ fn create_fragments_file(input_bam_filename: &str) {
 
         // Write a fragment line if and only if:
         //   - read is properly paired.
-        //   - read is not a duplicate.
         //   - read and its pair are located on the same chromosome.
         //   - read and its pair have a mapping quality of 30 or higher.
         //   - insert size is at least 10.
         //     This also ensures that only a fragment line is generated for
         //     the read of the read pair that is on the positive strand.
+        //   - read is primary alignment.
         //   - read has an associated CB tag.
         if record.is_proper_pair()
-            && !record.is_duplicate()
             && record.tid() == record.mtid()
             && record.mapq() >= 30
             && record.insert_size() >= 10
+            && !record.is_secondary()
+            && !record.is_supplementary()
         {
             if let Ok(mate_mapq_aux) = record.aux(b"MQ") {
                 if let Aux::I32(mate_mapq) = mate_mapq_aux {
