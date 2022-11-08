@@ -79,7 +79,30 @@ fn main() {
     let args: Vec<String> = env::args().collect();
 
     if args.len() != 2 {
-        eprintln!("Usage: create_fragments_file input.bam");
+        eprintln!(r#"
+Purpose: Create fragments file from BAM file.
+
+Usage:
+    create_fragments_file sample.bam \
+      | coreutils sort --parallel=8 -S 16G -k 1,1V -k 2,2n -k 3,3n -k 4,4 \
+      | uniq -c \
+      | mawk -v 'OFS=\t' '{{ print $2, $3, $4, $5, $1 }}' \
+      | bgzip -@ 4 -c /dev/stdin \
+      > sample.fragments.raw.tsv.gz
+
+    - Create fragments file from BAM file:
+        - read is properly paired.
+        - read and its pair are located on the same chromosome.
+        - read and its pair have a mapping quality of 30 or higher.
+        - insert size is at least 10.
+          This also ensures that only a fragment line is generated for
+          the read of the read pair that is on the positive strand.
+        - read is primary alignment.
+        - read has an associated CB tag.
+    - Sort by coordinate and cell barcode.
+    - Collapse duplicate fragments (same coordinate and cell barcode).
+    - Write as bgzipped fragments file.
+"#);
         process::exit(1);
     }
 
