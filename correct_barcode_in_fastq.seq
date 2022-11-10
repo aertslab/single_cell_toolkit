@@ -3,8 +3,11 @@ import gzip
 import sys
 
 from bio.kmer import Kmer
-from seq_lib.barcode_correction import read_barcode_whitelist_from_file, CorrectedBc, correct_bc_by_qual_order_with_whitelist, correct_bc_with_Ns_with_whitelist
-
+from seq_lib.barcode_correction import (
+    correct_bc_by_qual_order_with_whitelist, correct_bc_with_Ns_with_whitelist,
+    read_barcode_whitelist_from_file
+)
+from seq_lib.utils import is_index2_reverse_complemented
 
 # bc_length needs to be passed when invoking seqc: "seqc run -D bc_length=16 -release correct_barcode_in_fastq.seq"
 K = Kmer[bc_length]
@@ -14,8 +17,7 @@ min_frac_bcs_to_find_default = 0.5
 
 
 def correct_bc_in_fastq(
-    bcs_fwd_whitelist: set[K],
-    bcs_rev_whitelist: set[K],
+    bc_whitelist: set[K],
     fastq_with_raw_bc_filename: str,
     fastq_with_corrected_bc_filename: str,
     corrected_bc_stats_tsv_filename: str,
@@ -39,22 +41,44 @@ def correct_bc_in_fastq(
     if fastq_with_corrected_bc_filename == "-":
         fastq_with_corrected_bc_filename = "/dev/stdout"
 
+    is_bc_rev = True
+    sequencing_machine_id_prev = "ZZZZZZZZ"
+
     with open(fastq_with_corrected_bc_filename, "w") as fastq_with_corrected_bc_fh:
         for record in bio.FASTQ(fastq_with_raw_bc_filename, gzip=True, validate=False, copy=True):
             nbr_reads += 1
+
+            # Get sequencing machine ID from FASTQ read name (part before first colon).
+            sequencing_machine_id = record.name[0:record.name.index(":")]
+
+            if sequencing_machine_id != sequencing_machine_id_prev:
+                # If previous FASTQ record was from a different machine or this is the
+                # first FASTQ record, check if based on sequencing machine ID if index
+                # 2 read is reverse complemented or not.
+                is_bc_rev = is_index2_reverse_complemented(sequencing_machine_id)
+
+                # Remember sequencing machine ID of current FASTQ record for next FASTQ
+                # record.
+                sequencing_machine_id_prev = sequencing_machine_id
+
+            bc_seq, bc_qual = (
+                (~record.seq, record.qual[::-1])
+                if is_bc_rev
+                else (record.seq, record.qual)
+            )
 
             corrected_bc = (
                 correct_bc_with_Ns_with_whitelist(
                     bc_whitelist,
                     bc_length,
-                    str(record.seq),
+                    str(bc_seq),
                     max_hamming_dist
                 )
                 if "N" in str(record.seq)
                 else correct_bc_by_qual_order_with_whitelist(
                     bc_whitelist,
-                    K(record.seq),
-                    record.qual,
+                    K(bc_seq),
+                    bc_qual,
                     max_hamming_dist
                 )
             )
@@ -66,12 +90,12 @@ def correct_bc_in_fastq(
                 # (exact match or x mismatches) and append " CB:Z:corrected_barcode"
                 # to the FASTQ record comment.
                 fastq_with_corrected_bc_fh.write(
-                    f'@{record.name}{" " + record.comment if record.comment else ""} CB:Z:{corrected_bc.corrected_bc}\n{record.seq}\n+\n{record.qual}\n'
+                    f'@{record.name}{" " + record.comment if record.comment else ""} CB:Z:{corrected_bc.corrected_bc}\n{bc_seq}\n+\n{bc_qual}\n'
                 )
             else:
                 # Write original FASTQ record if the barcode did not match the whitelist (exact match or 1 mismatch).
                 fastq_with_corrected_bc_fh.write(
-                    f'@{record.name}{" " + record.comment if record.comment else ""}\n{record.seq}\n+\n{record.qual}\n'
+                    f'@{record.name}{" " + record.comment if record.comment else ""}\n{bc_seq}\n+\n{bc_qual}\n'
                 )
 
     with open(corrected_bc_stats_tsv_filename, 'w') as corrected_bc_stats_tsv_fh:
