@@ -1,7 +1,7 @@
 import gzip
 
 
-def read_line_from_uncompressed_or_gzipped_file(filename: str) -> str:
+def read_line_from_uncompressed_or_gzipped_file(filename: str) -> Generator[str]:
     """
     Yield line from uncompressed or gzip compressed file.
     """
