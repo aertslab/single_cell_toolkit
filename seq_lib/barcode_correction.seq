@@ -6,7 +6,12 @@ import sys
 from .utils import read_line_from_uncompressed_or_gzipped_file
 
 
-def read_barcode_whitelist_from_file(bc_whitelist_filename: str, bc_length: Static[int], bc_column_idx: int = 0, warning: bool=True):
+def read_barcode_whitelist_from_file(
+    bc_whitelist_filename: str,
+    bc_length: Static[int],
+    bc_column_idx: int = 0,
+    warning: bool=True
+):
     """
     Read whitelisted barcodes from file and convert to a set of Kmers.
     """
@@ -17,7 +22,7 @@ def read_barcode_whitelist_from_file(bc_whitelist_filename: str, bc_length: Stat
         bc_str = bc_line.strip().split('\t')[bc_column_idx]
         bc_length_current_line = len(bc_str)
 
-        if bc_length_current_line == 0 or bc_str[0] == '#':
+        if bc_length_current_line == 0 or bc_str[0] == "#":
             # Skip empty lines and lines that start with a comment.
             continue
 
@@ -25,7 +30,8 @@ def read_barcode_whitelist_from_file(bc_whitelist_filename: str, bc_length: Stat
             # Skip barcodes if they have a different length than the Kmer length.
             if warning:
                 print(
-                    f'Warning: Barcode "{bc_str}" is skipped (barcode length of {bc_length_current_line} instead of requested {bc_length}).',
+                    f'Warning: Barcode "{bc_str}" is skipped (barcode length of ' +
+                    f"{bc_length_current_line} instead of requested {bc_length}).",
                     file=sys.stderr
                 )
             continue
@@ -51,7 +57,7 @@ def hamming_dist1_neighbors(kmer):
     """
 
     for i in range(len(kmer)):
-        for b in (k'A', k'C', k'G', k'T'):
+        for b in (k"A", k"C", k"G", k"T"):
             if kmer[i] != b:
                 yield kmer |> base(i, b)
 
@@ -67,9 +73,9 @@ def hamming_dist2_neighbors(kmer):
     for i in range(0, len(kmer) - 1):
         for j in range(i + 1, len(kmer)):
             if i < j:
-                for b1 in (k'A', k'C', k'G', k'T'):
+                for b1 in (k"A", k"C", k"G", k"T"):
                     if kmer[i] != b1:
-                        for b2 in (k'A', k'C', k'G', k'T'):
+                        for b2 in (k"A", k"C", k"G", k"T"):
                            if kmer[j] != b2:
                                yield kmer |> base(i, b1) |> base(j, b2)
 
@@ -83,11 +89,11 @@ def hamming_dist3_neighbors(kmer):
         for j in range(i + 1, len(kmer) - 1):
             for k in range(i + 2, len(kmer)):
                 if i < j:
-                    for b1 in (k'A', k'C', k'G', k'T'):
+                    for b1 in (k"A", k"C", k"G", k"T"):
                         if kmer[i] != b1:
-                            for b2 in (k'A', k'C', k'G', k'T'):
+                            for b2 in (k"A", k"C", k"G", k"T"):
                                 if kmer[j] != b2:
-                                    for b3 in (k'A', k'C', k'G', k'T'):
+                                    for b3 in (k"A", k"C", k"G", k"T"):
                                         if kmer[k] != b3:
                                             yield kmer |> base(i, b1) |> base(j, b2) |> base(k, b3)
 
@@ -105,13 +111,14 @@ def hamming_dist_neighbors(kmer, hamming_dist: int):
         case 3:
             return hamming_dist3_neighbors(kmer)
         case _:
-            raise ValueError('Only hamming distances 1, 2 and 3 are supported.')
+            raise ValueError("Only hamming distances 1, 2 and 3 are supported.")
 
 
 @inline
 def get_qual_sorted_idx(qual):
     """
-    Sort quality scores from low to high and return the index positions of the sorted array.
+    Sort quality scores from low to high and return the index positions of the sorted
+    array.
     """
 
     qual_sorted_idx = list(
@@ -120,7 +127,7 @@ def get_qual_sorted_idx(qual):
             sorted(
                 enumerate(qual),
                 key=lambda x: x[1],
-                algorithm='insertion',
+                algorithm="insertion",
                 reverse=False
             ) 
         )
@@ -132,7 +139,8 @@ def get_qual_sorted_idx(qual):
 def hamming_dist1_neighbors_by_qual_order(kmer, qual):
     """
     Yield all kmers with hamming distance of 1, but start mutating original kmer at
-    postition with lowest base quality score to position with highest base quality score. 
+    postition with lowest base quality score to position with highest base quality
+    score.
     """
 
     assert len(kmer) == len(qual)
@@ -140,7 +148,7 @@ def hamming_dist1_neighbors_by_qual_order(kmer, qual):
     qual_sorted_idx = get_qual_sorted_idx(qual)
 
     for i in range(len(kmer)):
-        for b in (k'A', k'C', k'G', k'T'):
+        for b in (k"A", k"C", k"G", k"T"):
             if kmer[qual_sorted_idx[i]] != b:
                 yield kmer |> base(qual_sorted_idx[i], b)
 
@@ -148,7 +156,8 @@ def hamming_dist1_neighbors_by_qual_order(kmer, qual):
 def hamming_dist2_neighbors_by_qual_order(kmer, qual):
     """
     Yield all kmers with hamming distance of 2, but start mutating original kmer at
-    postition with lowest base quality score to position with highest base quality score. 
+    postition with lowest base quality score to position with highest base quality
+    score.
     """
 
     assert len(kmer) == len(qual)
@@ -158,9 +167,9 @@ def hamming_dist2_neighbors_by_qual_order(kmer, qual):
     for i in range(0, len(kmer) - 1):
         for j in range(i + 1, len(kmer)):
             if i < j:
-                for b1 in (k'A', k'C', k'G', k'T'):
+                for b1 in (k"A", k"C", k"G", k"T"):
                     if kmer[qual_sorted_idx[i]] != b1:
-                        for b2 in (k'A', k'C', k'G', k'T'):
+                        for b2 in (k"A", k"C", k"G", k"T"):
                            if kmer[qual_sorted_idx[j]] != b2:
                                yield kmer |> base(qual_sorted_idx[i], b1) |> base(qual_sorted_idx[j], b2)
 
@@ -168,7 +177,8 @@ def hamming_dist2_neighbors_by_qual_order(kmer, qual):
 def hamming_dist3_neighbors_by_qual_order(kmer, qual):
     """
     Yield all kmers with hamming distance of 3, but start mutating original kmer at
-    postition with lowest base quality score to position with highest base quality score. 
+    postition with lowest base quality score to position with highest base quality
+    score.
     """
 
     assert len(kmer) == len(qual)
@@ -179,19 +189,20 @@ def hamming_dist3_neighbors_by_qual_order(kmer, qual):
         for j in range(i + 1, len(kmer) - 1):
             for k in range(i + 2, len(kmer)):
                 if i < j:
-                    for b1 in (k'A', k'C', k'G', k'T'):
+                    for b1 in (k"A", k"C", k"G", k"T"):
                         if kmer[qual_sorted_idx[i]] != b1:
-                            for b2 in (k'A', k'C', k'G', k'T'):
+                            for b2 in (k"A", k"C", k"G", k"T"):
                                 if kmer[qual_sorted_idx[j]] != b2:
-                                    for b3 in (k'A', k'C', k'G', k'T'):
+                                    for b3 in (k"A", k"C", k"G", k"T"):
                                         if kmer[qual_sorted_idx[k]] != b3:
                                             yield kmer |> base(qual_sorted_idx[i], b1) |> base(qual_sorted_idx[j], b2) |> base(qual_sorted_idx[k], b3)
 
 
 def hamming_dist_neighbors_by_qual_order(kmer, qual, hamming_dist: int):
     """
-    Yield all kmers with hamming distance of 1, 2 or 3, but start mutating original kmer at
-    postition with lowest base quality score to position with highest base quality score.
+    Yield all kmers with hamming distance of 1, 2 or 3, but start mutating original
+    kmer at postition with lowest base quality score to position with highest base
+    quality score.
     """
 
     match hamming_dist:
@@ -202,7 +213,7 @@ def hamming_dist_neighbors_by_qual_order(kmer, qual, hamming_dist: int):
         case 3:
             return hamming_dist3_neighbors_by_qual_order(kmer, qual)
         case _:
-            raise ValueError('Only hamming distances 1, 2 and 3 are supported.')
+            raise ValueError("Only hamming distances 1, 2 and 3 are supported.")
 
 
 @tuple
@@ -214,9 +225,14 @@ class CorrectedBc:
         return (hamming_dist, corrected_bc)
         
 
-def correct_bc_with_whitelist(bc_whitelist, bc, max_hamming_dist: Optional[int]=None) -> Optional[CorrectedBc]:
+def correct_bc_with_whitelist(
+    bc_whitelist,
+    bc,
+    max_hamming_dist: Optional[int]=None
+) -> Optional[CorrectedBc]:
     """
-    Check if provided barcode matches the whitelist with up to max_hamming_dist (0, 1, 2 or 3) mismatches.
+    Check if provided barcode matches the whitelist with up to max_hamming_dist
+    (0, 1, 2 or 3) mismatches.
     """
 
     max_hamming_distx = ~max_hamming_dist if max_hamming_dist else 3
@@ -248,7 +264,12 @@ def correct_bc_with_whitelist(bc_whitelist, bc, max_hamming_dist: Optional[int]=
     return None
 
 
-def correct_bc_by_qual_order_with_whitelist(bc_whitelist, bc, qual, max_hamming_dist: Optional[int]=None) -> Optional[CorrectedBc]:
+def correct_bc_by_qual_order_with_whitelist(
+    bc_whitelist,
+    bc,
+    qual,
+    max_hamming_dist: Optional[int]=None
+) -> Optional[CorrectedBc]:
     """
     Check if provided barcode matches the whitelist with up to max_hamming_dist
     (0, 1, 2 or 3) mismatches by starting mutating original kmer at postition
@@ -256,7 +277,10 @@ def correct_bc_by_qual_order_with_whitelist(bc_whitelist, bc, qual, max_hamming_
     """
 
     if len(bc) != len(qual):
-        raise ValueError(f'Barcode ("{str(bc)}") and quality string ("{qual}") should have the same length.')
+        raise ValueError(
+            f'Barcode ("{str(bc)}") and quality string ("{qual}") should have the ' +
+            "same length."
+        )
 
     max_hamming_distx = ~max_hamming_dist if max_hamming_dist else 3
     max_hamming_distx = 3 if max_hamming_distx == -1 else max_hamming_distx
@@ -287,10 +311,15 @@ def correct_bc_by_qual_order_with_whitelist(bc_whitelist, bc, qual, max_hamming_
     return None
 
 
-def correct_bc_with_Ns_with_whitelist(bc_whitelist, bc_length: Static[int], bc_with_Ns: str, max_hamming_dist: Optional[int]=None) -> Optional[CorrectedBc]:
+def correct_bc_with_Ns_with_whitelist(
+    bc_whitelist,
+    bc_length: Static[int],
+    bc_with_Ns: str,
+    max_hamming_dist: Optional[int]=None
+) -> Optional[CorrectedBc]:
     """
-    Check if provided barcode with Ns matches the whitelist with up to max_hamming_dist (0, 1, 2 or 3) mismatches
-    (only Ns will be corrected).
+    Check if provided barcode with Ns matches the whitelist with up to
+    max_hamming_dist (0, 1, 2 or 3) mismatches (only Ns will be corrected).
     """
 
     max_hamming_distx = ~max_hamming_dist if max_hamming_dist else 3
@@ -305,29 +334,30 @@ def correct_bc_with_Ns_with_whitelist(bc_whitelist, bc_length: Static[int], bc_w
             n_positions.append(idx)
 
     if n_count > max_hamming_distx:
-        # Do not try to correct barcode, if there are more Ns than max allowd hamming distance.
+        # Do not try to correct barcode, if there are more Ns than max allowed hamming
+        # distance.
         return None
 
     # Convert barcode with Ns to a kmer.
-    bc = Kmer[bc_length](bc_with_Ns.replace('N', 'A'))
+    bc = Kmer[bc_length](bc_with_Ns.replace("N", "A"))
 
     if n_count == 1:
-        for b in (k'A', k'C', k'G', k'T'):
+        for b in (k"A", k"C", k"G", k"T"):
             bc = bc |> base(n_positions[0], b)
 
             if bc in bc_whitelist:
                 return CorrectedBc(1, str(bc))
     elif n_count == 2:
-        for b1 in (k'A', k'C', k'G', k'T'):
-            for b2 in (k'A', k'C', k'G', k'T'):
+        for b1 in (k"A", k"C", k"G", k"T"):
+            for b2 in (k"A", k"C", k"G", k"T"):
                 bc =bc |> base(n_positions[0], b1) |> base(n_positions[1], b2)
 
                 if bc in bc_whitelist:
                     return CorrectedBc(2, str(bc))
     elif n_count == 3:
-        for b1 in (k'A', k'C', k'G', k'T'):
-            for b2 in (k'A', k'C', k'G', k'T'):
-                for b3 in (k'A', k'C', k'G', k'T'):
+        for b1 in (k"A", k"C", k"G", k"T"):
+            for b2 in (k"A", k"C", k"G", k"T"):
+                for b3 in (k"A", k"C", k"G", k"T"):
                     bc = bc |> base(n_positions[0], b1) |> base(n_positions[1], b2) |> base(n_positions[2], b3)
 
                     if bc in bc_whitelist:
