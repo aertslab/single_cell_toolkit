@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import argparse
+from typing import Sequence
 
 import polars as pl
 
@@ -14,7 +15,7 @@ def calculate_jaccard_index_cbs(
     fragments_tsv_filename: str,
     CB1_vs_CB2_jaccard_tsv_filename: str,
     min_frags_per_CB: int = 1000,
-    chromosomes: str | None = None,
+    chromosomes: str | Sequence | None = None,
 ) -> None:
 
     print(f'Reading fragments file "{fragments_tsv_filename}" ...')
@@ -39,14 +40,23 @@ def calculate_jaccard_index_cbs(
     )
 
     if chromosomes:
-        if chromosomes.find(",") != -1:
-            # Chromosomes names to keep were specified as a comma separated list.
-            chromosomes = chromosomes.split(",")
-        elif chromosomes.find(" ") != -1:
-            # Chromosomes names to keep were specified as a space separated list.
-            chromosomes = chromosomes.split(" ")
+        if isinstance(chromosomes, str):
+            if chromosomes.find(",") != -1:
+                # Chromosomes names to keep were specified as a comma separated list.
+                chromosomes = chromosomes.split(",")
+            elif chromosomes.find(" ") != -1:
+                # Chromosomes names to keep were specified as a space separated list.
+                chromosomes = chromosomes.split(" ")
 
-        if isinstance(chromosomes, list):
+        if isinstance(chromosomes, str):
+            # Assume chromosome names to keep is a regex.
+            chroms_to_keep = fragments_df.select(
+                # Get all chromosome names available in the fragments file.
+                pl.col("chrom").unique(),
+            ).filter(
+                pl.col("chrom").cast(pl.Utf8).str.contains(chromosomes),
+            )
+        elif isinstance(chromosomes, Sequence):
             chroms_to_keep = fragments_df.select(
                 # Get all chromosome names available in the fragments file.
                 pl.col("chrom").unique(),
@@ -56,18 +66,15 @@ def calculate_jaccard_index_cbs(
                 .cast(pl.Utf8)
                 .is_in(chromosomes),
             )
-        else:
-            # Assume chromosome names to keep is a regex.
-            chroms_to_keep = fragments_df.select(
-                # Get all chromosome names available in the fragments file.
-                pl.col("chrom").unique(),
-            ).filter(
-                pl.col("chrom").cast(pl.Utf8).str.contains(chromosomes),
-            )
 
         print(
             "Keeping chromosomes: "
-            + ", ".join(chroms_to_keep.get_column("chrom").sort().to_list())
+            + ", ".join(
+                [
+                    str(chr)
+                    for chr in chroms_to_keep.get_column("chrom").sort().to_list()
+                ]
+            )
         )
 
         print("Only keep fragments located on the requested chromosomes...")
