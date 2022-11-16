@@ -68,7 +68,7 @@ def merge_cbs_over_jaccard_index_threshold(
     )
 
     # Write original CB to merged CBs TSV file.
-    original_CB_to_merged_CBs_df.to_csv(
+    original_CB_to_merged_CBs_df.write_csv(
         f"{output_fragments_tsv_filename}.original_CB_to_merged_CBs.tsv",
         sep="\t",
     )
@@ -109,7 +109,7 @@ def merge_cbs_over_jaccard_index_threshold(
                 .alias("CB_count")
             ]
         )
-        .to_csv(
+        .write_csv(
             # Write output fragments TSV file with merged CBs.
             output_fragments_tsv_filename,
             sep="\t",
