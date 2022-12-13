@@ -1,5 +1,4 @@
 import bio
-import gzip
 import sys
 
 from bio.kmer import Kmer
@@ -45,7 +44,7 @@ def correct_bc_in_fastq(
     sequencing_machine_id_prev = "ZZZZZZZZ"
 
     with open(fastq_with_corrected_bc_filename, "w") as fastq_with_corrected_bc_fh:
-        for record in bio.FASTQ(fastq_with_raw_bc_filename, gzip=True, validate=False, copy=True):
+        for record in bio.FASTQ(fastq_with_raw_bc_filename, gzip=False, validate=False, copy=True):
             nbr_reads += 1
 
             # Get sequencing machine ID from FASTQ read name (part before first colon).
@@ -120,46 +119,51 @@ def correct_bc_in_fastq(
     return (frac_bcs_found >= min_frac_bcs_to_find), frac_bcs_found
 
 
-if len(sys.argv) < 6:
-    print(
-        f"Usage: seqc run -D bc_length={bc_length} -release {sys.argv[0]} " +
-        "bc_whitelist_file fastq_with_raw_bc_file fastq_with_corrected_bc_file " +
-        "corrected_bc_stats_file max_mismatches [min_frac_bcs_to_find]",
-        file=sys.stderr
-    )
-    sys.exit(1)
-else:
-    bc_whitelist_filename = sys.argv[1]
-    fastq_with_raw_bc_filename = sys.argv[2]
-    fastq_with_corrected_bc_filename = sys.argv[3]
-    corrected_bc_stats_tsv_filename = sys.argv[4]
-    max_mismatches = int(sys.argv[5])
-    min_frac_bcs_to_find = float(sys.argv[6]) if len(sys.argv) == 7 else min_frac_bcs_to_find_default
-
-    # Read whitelisted barcodes from file and convert to a set of Kmers.
-    bc_whitelist = read_barcode_whitelist_from_file(
-        bc_whitelist_filename=bc_whitelist_filename,
-        bc_length=bc_length,
-        bc_column_idx=0,
-        warning=True
-    )
-
-    # Read FASTQ with barcodes and write a FASTQ with corrected barcodes for barcodes
-    # that match the whitelist closely enough, else write the original barcodes.
-    enough_bcs_found, frac_bcs_found = correct_bc_in_fastq(
-        bc_whitelist=bc_whitelist,
-        fastq_with_raw_bc_filename=fastq_with_raw_bc_filename,
-        fastq_with_corrected_bc_filename=fastq_with_corrected_bc_filename,
-        corrected_bc_stats_tsv_filename=corrected_bc_stats_tsv_filename,
-        max_hamming_dist=max_mismatches,
-        min_frac_bcs_to_find=min_frac_bcs_to_find
-    )
-
-    if not enough_bcs_found:
+def main():
+    if len(sys.argv) < 6:
         print(
-            f"Warning: Only {frac_bcs_found * 100.00}% of the reads have a barcode.",
-            "         Check if you provided the correct barcode whitelist file.\n",
-            sep="\n",
+            f"Usage: seqc run -D bc_length={bc_length} -release {sys.argv[0]} " +
+            "bc_whitelist_file fastq_with_raw_bc_file fastq_with_corrected_bc_file " +
+            "corrected_bc_stats_file max_mismatches [min_frac_bcs_to_find]",
             file=sys.stderr
         )
         sys.exit(1)
+    else:
+        bc_whitelist_filename = sys.argv[1]
+        fastq_with_raw_bc_filename = sys.argv[2]
+        fastq_with_corrected_bc_filename = sys.argv[3]
+        corrected_bc_stats_tsv_filename = sys.argv[4]
+        max_mismatches = int(sys.argv[5])
+        min_frac_bcs_to_find = float(sys.argv[6]) if len(sys.argv) == 7 else min_frac_bcs_to_find_default
+
+        # Read whitelisted barcodes from file and convert to a set of Kmers.
+        bc_whitelist = read_barcode_whitelist_from_file(
+            bc_whitelist_filename=bc_whitelist_filename,
+            bc_length=bc_length,
+            bc_column_idx=0,
+            warning=True
+        )
+
+        # Read FASTQ with barcodes and write a FASTQ with corrected barcodes for barcodes
+        # that match the whitelist closely enough, else write the original barcodes.
+        enough_bcs_found, frac_bcs_found = correct_bc_in_fastq(
+            bc_whitelist=bc_whitelist,
+            fastq_with_raw_bc_filename=fastq_with_raw_bc_filename,
+            fastq_with_corrected_bc_filename=fastq_with_corrected_bc_filename,
+            corrected_bc_stats_tsv_filename=corrected_bc_stats_tsv_filename,
+            max_hamming_dist=max_mismatches,
+            min_frac_bcs_to_find=min_frac_bcs_to_find
+        )
+
+        if not enough_bcs_found:
+            print(
+                f"Warning: Only {frac_bcs_found * 100.00}% of the reads have a barcode.",
+                "         Check if you provided the correct barcode whitelist file.\n",
+                sep="\n",
+                file=sys.stderr
+            )
+            sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
