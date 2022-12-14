@@ -350,7 +350,7 @@ def correct_bc_with_Ns_with_whitelist(
     elif n_count == 2:
         for b1 in (k"A", k"C", k"G", k"T"):
             for b2 in (k"A", k"C", k"G", k"T"):
-                bc =bc |> base(n_positions[0], b1) |> base(n_positions[1], b2)
+                bc = bc |> base(n_positions[0], b1) |> base(n_positions[1], b2)
 
                 if bc in bc_whitelist:
                     return CorrectedBc(2, str(bc))
@@ -365,3 +365,29 @@ def correct_bc_with_Ns_with_whitelist(
 
     # Ns in barcode could not be corrected.
     return None
+
+
+def correct_bc_by_qual_order_with_whitelist_or_correct_bc_with_Ns_with_whitelist(
+    bc_whitelist,
+    bc_length: Static[int],
+    bc_seq: seq,
+    bc_qual: str,
+    max_hamming_dist: Optional[int]=None
+) -> Optional[CorrectedBc]:
+    corrected_bc = (
+        correct_bc_with_Ns_with_whitelist(
+            bc_whitelist,
+            bc_length,
+            str(bc_seq),
+            max_hamming_dist,
+        )
+        if "N" in str(bc_seq)
+        else correct_bc_by_qual_order_with_whitelist(
+            bc_whitelist,
+            Kmer[bc_length](bc_seq),
+            bc_qual,
+            max_hamming_dist,
+        )
+    )
+
+    return corrected_bc

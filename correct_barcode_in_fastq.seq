@@ -3,7 +3,7 @@ import sys
 
 from bio.kmer import Kmer
 from seq_lib.barcode_correction import (
-    correct_bc_by_qual_order_with_whitelist, correct_bc_with_Ns_with_whitelist,
+    correct_bc_by_qual_order_with_whitelist_or_correct_bc_with_Ns_with_whitelist,
     read_barcode_whitelist_from_file
 )
 from seq_lib.utils import get_seq_and_qual_barcode_read
@@ -73,20 +73,12 @@ def correct_bc_in_fastq(
                 seq_end=bc_length,
             )
 
-            corrected_bc = (
-                correct_bc_with_Ns_with_whitelist(
-                    bc_whitelist,
-                    bc_length,
-                    str(bc_seq),
-                    max_hamming_dist,
-                )
-                if "N" in str(bc_seq)
-                else correct_bc_by_qual_order_with_whitelist(
-                    bc_whitelist,
-                    K(bc_seq),
-                    bc_qual,
-                    max_hamming_dist,
-                )
+            corrected_bc = correct_bc_by_qual_order_with_whitelist_or_correct_bc_with_Ns_with_whitelist(
+                bc_whitelist=bc_whitelist,
+                bc_length=bc_length,
+                bc_seq=bc_seq,
+                bc_qual=bc_qual,
+                max_hamming_dist=max_hamming_dist,
             )
 
             if corrected_bc:
