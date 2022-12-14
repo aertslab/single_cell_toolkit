@@ -88,17 +88,22 @@ def correct_bc_in_fastq(
                 # (exact match or x mismatches) and append " CB:Z:corrected_barcode"
                 # to the FASTQ record comment.
                 fastq_with_corrected_bc_fh.write(
-                    f'@{record.name}{" " + record.comment if record.comment else ""} CB:Z:{corrected_bc.corrected_bc}\n{bc_seq}\n+\n{bc_qual}\n'
+                    f"@{record.name}" +
+                    f'{" " + record.comment if record.comment else ""} ' +
+                    f"CB:Z:{corrected_bc.corrected_bc}\n" +
+                    f"{bc_seq}\n+\n{bc_qual}\n"
                 )
             else:
                 # Write original FASTQ record if the barcode did not match the whitelist (exact match or 1 mismatch).
                 fastq_with_corrected_bc_fh.write(
-                    f'@{record.name}{" " + record.comment if record.comment else ""}\n{bc_seq}\n+\n{bc_qual}\n'
+                    f"@{record.name}" +
+                    f'{" " + record.comment if record.comment else ""}\n' +
+                    f"{bc_seq}\n+\n{bc_qual}\n"
                 )
 
     with open(corrected_bc_stats_tsv_filename, 'w') as corrected_bc_stats_tsv_fh:
         corrected_bc_stats_tsv_fh.write(
-            f"nbr_reads:\t{nbr_reads}\n" +
+            f"nbr_reads\t{nbr_reads}\n" +
             f"total_bc_found\t{sum(nbr_bc_mismatches)}\n"
         )
         for i in range(0, max_hamming_dist + 1):
