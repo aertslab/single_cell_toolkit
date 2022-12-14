@@ -62,7 +62,7 @@ def correct_bc_in_fastq(
         fastq_with_corrected_bc_filename = "/dev/stdout"
 
     with open(fastq_with_corrected_bc_filename, "w") as fastq_with_corrected_bc_fh:
-        for record in bio.FASTQ(fastq_with_raw_bc_filename, gzip=False, validate=False, copy=True):
+        for record in bio.FASTQ(fastq_with_raw_bc_filename, gzip=True, validate=False, copy=True):
             nbr_reads += 1
 
             # Get barcode sequence and associated quality from FASTQ record
