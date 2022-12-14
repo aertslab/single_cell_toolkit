@@ -1,3 +1,4 @@
+import bio
 import gzip
 
 
@@ -55,3 +56,54 @@ def is_index2_reverse_complemented(sequencing_machine_id: str) -> bool:
             return False
 
     raise ValueError(f"Unsupported sequencing machine ID: \"{sequencing_machine_id}\".")
+
+
+# Sequencing machine ID to is_index2_reverse_complemented mapping cache.
+seq_machine_id_to_is_i2_rev_comp: Dict[str, bool] = dict()
+
+def get_seq_and_qual_barcode_read(
+    fastq_record: bio.FASTQRecord,
+    seq_start: int,
+    seq_end: int
+) -> Tuple[bio.seq, str]:
+    """
+    Get sequence and associated quality scores from the current FASTQ record,
+    for the provided seq_start and seq_end values, reverse complemented if
+    needed based on the sequencer used.
+
+    Parameters
+    ----------
+    fastq_record: FASTQ record.
+    seq_start: Start of sequence to extract (position included).
+    seq_end: End of sequence to extract (position excluded).
+
+    Returns
+    -------
+    seq, qual:
+        Sub sequence of original FASTQ record and associated quality score,
+        reverse complemented if needed based on the sequencer used.
+    """
+    # Get sequencing machine ID from FASTQ read name (part before first colon).
+    sequencing_machine_id = fastq_record.name[0:fastq_record.name.index(":")]
+
+    is_bc_rev: bool
+
+    # Check if the reverse complement for the barcode sequence needs to be generated
+    # based on the sequencing machine ID. Check if the sequencing machine ID is in
+    # the seq_machine_id_to_is_i2_rev_comp dict cache to avoid
+    # calling is_index2_reverse_complemented() unconditionally.
+    if sequencing_machine_id not in seq_machine_id_to_is_i2_rev_comp:
+        is_bc_rev = is_index2_reverse_complemented(sequencing_machine_id)
+        seq_machine_id_to_is_i2_rev_comp[sequencing_machine_id] = is_bc_rev
+    else:
+        is_bc_rev = seq_machine_id_to_is_i2_rev_comp[sequencing_machine_id]
+
+    # Get sequence and quality for current FASTQ record (limited to seq_start and
+    # seq_end region and reverse complemented, if necessary).
+    seq, qual = (
+        (~(fastq_record.seq[seq_start:seq_end]), fastq_record.qual[seq_start:seq_end][::-1])
+        if is_bc_rev
+        else (fastq_record.seq[seq_start:seq_end], fastq_record.qual[seq_start:seq_end])
+    )
+
+    return seq, qual
