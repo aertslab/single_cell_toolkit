@@ -6,7 +6,8 @@ from seq_lib.barcode_correction import (
     correct_bc_by_qual_order_with_whitelist, correct_bc_with_Ns_with_whitelist,
     read_barcode_whitelist_from_file
 )
-from seq_lib.utils import is_index2_reverse_complemented
+from seq_lib.utils import get_seq_and_qual_barcode_read
+
 
 # bc_length needs to be passed when invoking seqc: "seqc run -D bc_length=16 -release correct_barcode_in_fastq.seq"
 K = Kmer[bc_length]
@@ -21,13 +22,33 @@ def correct_bc_in_fastq(
     fastq_with_corrected_bc_filename: str,
     corrected_bc_stats_tsv_filename: str,
     max_hamming_dist: int = 1,
-    min_frac_bcs_to_find: float = min_frac_bcs_to_find_default
+    min_frac_bcs_to_find: float = min_frac_bcs_to_find_default,
 ):
     """
-    Read FASTQ file with barcodes and append " CB:Z:corrected_barcode" to the FASTQ record comment
-    if the barcode matches the whitelist (exact match or 1 mismatch).
-    """
+    Read FASTQ file with barcodes and append " CB:Z:corrected_barcode" to the FASTQ
+    record comment if the barcode matches the whitelist (exactly or with max
+    max_hamming_dist mismatch).
 
+    Parameters
+    ----------
+    bc_whitelist:
+        Barcode whitelist.
+    fastq_with_raw_bc_filename:
+        Input FASTQ file with raw barcode reads.
+    fastq_with_corrected_bc_filename:
+        Output FASTQ file with corrected barcode reads in the FASTQ record comment.
+    corrected_bc_stats_tsv_filename:
+        File with barcode correction statistics.
+    max_hamming_dist:
+        Maximum hamming distance allowed for the barcode to consider it a match with the whitelist.
+    min_frac_bcs_to_find:
+        Required minimum fraction of barcode reads that need to contain a barcode.
+
+    Returns
+    -------
+    enough_bcs_found, frac_bcs_found
+
+    """
     if max_hamming_dist > 3 or max_hamming_dist < 0:
         raise ValueError("Only hamming distances 0, 1, 2 and 3 are supported.")
 
@@ -40,30 +61,16 @@ def correct_bc_in_fastq(
     if fastq_with_corrected_bc_filename == "-":
         fastq_with_corrected_bc_filename = "/dev/stdout"
 
-    is_bc_rev = True
-    sequencing_machine_id_prev = "ZZZZZZZZ"
-
     with open(fastq_with_corrected_bc_filename, "w") as fastq_with_corrected_bc_fh:
         for record in bio.FASTQ(fastq_with_raw_bc_filename, gzip=False, validate=False, copy=True):
             nbr_reads += 1
 
-            # Get sequencing machine ID from FASTQ read name (part before first colon).
-            sequencing_machine_id = record.name[0:record.name.index(":")]
-
-            if sequencing_machine_id != sequencing_machine_id_prev:
-                # If previous FASTQ record was from a different machine or this is the
-                # first FASTQ record, check if based on sequencing machine ID if index
-                # 2 read is reverse complemented or not.
-                is_bc_rev = is_index2_reverse_complemented(sequencing_machine_id)
-
-                # Remember sequencing machine ID of current FASTQ record for next FASTQ
-                # record.
-                sequencing_machine_id_prev = sequencing_machine_id
-
-            bc_seq, bc_qual = (
-                (~record.seq, record.qual[::-1])
-                if is_bc_rev
-                else (record.seq, record.qual)
+            # Get barcode sequence and associated quality from FASTQ record
+            # reverse complemented if needed based on the sequencer.
+            bc_seq, bc_qual = get_seq_and_qual_barcode_read(
+                fastq_record=record,
+                seq_start=0,
+                seq_end=bc_length,
             )
 
             corrected_bc = (
@@ -71,14 +78,14 @@ def correct_bc_in_fastq(
                     bc_whitelist,
                     bc_length,
                     str(bc_seq),
-                    max_hamming_dist
+                    max_hamming_dist,
                 )
-                if "N" in str(record.seq)
+                if "N" in str(bc_seq)
                 else correct_bc_by_qual_order_with_whitelist(
                     bc_whitelist,
                     K(bc_seq),
                     bc_qual,
-                    max_hamming_dist
+                    max_hamming_dist,
                 )
             )
 
@@ -114,9 +121,10 @@ def correct_bc_in_fastq(
     # Calculate fraction of barcodes found in all reads.
     frac_bcs_found = float(sum(nbr_bc_mismatches)) / float(nbr_reads)
 
-    # Return if enough barcodes where found and the fraction of barcodes found in
-    # all reads.
-    return (frac_bcs_found >= min_frac_bcs_to_find), frac_bcs_found
+    # Are there enough reads that had a barcode?
+    enough_bcs_found = (frac_bcs_found >= min_frac_bcs_to_find)
+
+    return enough_bcs_found, frac_bcs_found
 
 
 def main():
@@ -141,7 +149,7 @@ def main():
             bc_whitelist_filename=bc_whitelist_filename,
             bc_length=bc_length,
             bc_column_idx=0,
-            warning=True
+            warning=True,
         )
 
         # Read FASTQ with barcodes and write a FASTQ with corrected barcodes for barcodes
@@ -152,7 +160,7 @@ def main():
             fastq_with_corrected_bc_filename=fastq_with_corrected_bc_filename,
             corrected_bc_stats_tsv_filename=corrected_bc_stats_tsv_filename,
             max_hamming_dist=max_mismatches,
-            min_frac_bcs_to_find=min_frac_bcs_to_find
+            min_frac_bcs_to_find=min_frac_bcs_to_find,
         )
 
         if not enough_bcs_found:
@@ -160,7 +168,7 @@ def main():
                 f"Warning: Only {frac_bcs_found * 100.00}% of the reads have a barcode.",
                 "         Check if you provided the correct barcode whitelist file.\n",
                 sep="\n",
-                file=sys.stderr
+                file=sys.stderr,
             )
             sys.exit(1)
 
