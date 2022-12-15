@@ -53,17 +53,17 @@ def correct_bc_in_fastq(
         raise ValueError("Only hamming distances 0, 1, 2 and 3 are supported.")
 
     # Store number of reads in FASTQ file.
-    nbr_reads = 0
+    total_reads = 0
 
     # Store number of reads which have hamming distance of 0, 1, 2 or 3 from barcodes whitelist.
-    nbr_bc_mismatches = [0 , 0, 0, 0]
+    bc_mismatches_stats = [0 , 0, 0, 0]
 
     if fastq_with_corrected_bc_filename == "-":
         fastq_with_corrected_bc_filename = "/dev/stdout"
 
     with open(fastq_with_corrected_bc_filename, "w") as fastq_with_corrected_bc_fh:
         for record in bio.FASTQ(fastq_with_raw_bc_filename, gzip=True, validate=False, copy=True):
-            nbr_reads += 1
+            total_reads += 1
 
             # Get barcode sequence and associated quality from FASTQ record
             # reverse complemented if needed based on the sequencer.
@@ -82,7 +82,7 @@ def correct_bc_in_fastq(
             )
 
             if corrected_bc:
-                nbr_bc_mismatches[corrected_bc.hamming_dist] += 1
+                bc_mismatches_stats[corrected_bc.hamming_dist] += 1
 
                 # Write original FASTQ record if the barcode matched the whitelist
                 # (exact match or x mismatches) and append " CB:Z:corrected_barcode"
@@ -101,22 +101,26 @@ def correct_bc_in_fastq(
                     f"{bc_seq}\n+\n{bc_qual}\n"
                 )
 
+    # Calculate number of reads with/without a barcode.
+    bc_reads = sum(bc_mismatches_stats)
+    reads_without_bc = total_reads - bc_reads
+
     with open(corrected_bc_stats_tsv_filename, 'w') as corrected_bc_stats_tsv_fh:
         corrected_bc_stats_tsv_fh.write(
-            f"nbr_reads\t{nbr_reads}\n" +
-            f"total_bc_found\t{sum(nbr_bc_mismatches)}\n"
+            f"reads\t{total_reads}\t100.00%\n" +
+            f"bc_reads\t{bc_reads}\t" +
+            f"{(bc_reads / total_reads * 100.0)}%\n" +
+            f"reads_without_bc\t{reads_without_bc}\t" +
+            f"{(reads_without_bc / total_reads * 100.0)}%\n\n"
         )
+
         for i in range(0, max_hamming_dist + 1):
             corrected_bc_stats_tsv_fh.write(
-                f"nbr_bc_{i}_mismatches\t{nbr_bc_mismatches[i]}\n"
+                f"bc_reads_with_{i}_mismatches\t{bc_mismatches_stats[i]}\n"
             )
 
-        corrected_bc_stats_tsv_fh.write(
-            f"nbr_bc_uncorrected\t{nbr_reads - sum(nbr_bc_mismatches)}\n"
-        )
-
     # Calculate fraction of barcodes found in all reads.
-    frac_bcs_found = float(sum(nbr_bc_mismatches)) / float(nbr_reads)
+    frac_bcs_found = bc_reads / total_reads
 
     # Are there enough reads that had a barcode?
     enough_bcs_found = (frac_bcs_found >= min_frac_bcs_to_find)
