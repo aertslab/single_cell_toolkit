@@ -106,4 +106,10 @@ def get_seq_and_qual_barcode_read(
         else (fastq_record.seq[seq_start:seq_end], fastq_record.qual[seq_start:seq_end])
     )
 
+    if len(seq) != (seq_end - seq_start):
+        raise ValueError(
+            f"Extracted sequence has a length of only {len(seq)} instead of " +
+            f"{seq_end - seq_start}."
+        )
+
     return seq, qual
