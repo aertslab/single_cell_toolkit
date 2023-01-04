@@ -134,7 +134,7 @@ def main():
             f"Usage: seqc run -D bc_length={bc_length} -release {sys.argv[0]} " +
             "bc_whitelist_file fastq_with_raw_bc_file fastq_with_corrected_bc_file " +
             "corrected_bc_stats_file max_mismatches [min_frac_bcs_to_find]",
-            file=sys.stderr
+            file=sys.stderr,
         )
         sys.exit(1)
     else:

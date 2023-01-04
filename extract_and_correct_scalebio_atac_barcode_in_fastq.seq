@@ -1,0 +1,365 @@
+import bio
+import sys
+
+from bio.kmer import Kmer
+from seq_lib.barcode_correction import (
+    correct_bc_by_qual_order_with_whitelist_or_correct_bc_with_Ns_with_whitelist,
+    read_barcode_whitelist_from_file
+)
+from seq_lib.utils import get_seq_and_qual_barcode_read
+
+
+# Minimum percentage of barcodes that should be found before returning with an error.
+min_frac_bcs_to_find_default = 0.5
+
+# Tagmentation whitelisted barcodes as a set of Kmers.
+tagmentation_bc_whitelist_rev_comp = {
+    k'GAACCGCG',
+    k'AGGTTATA',
+    k'TCATCCTT',
+    k'TGGCCGGT',
+    k'CAATTAAC',
+    k'ATAATGTG',
+    k'TCTGTTGG',
+    k'CTCACCAA',
+    k'TATTAGCT',
+    k'ATGTAAGT',
+    k'GCACGGAC',
+    k'GGTACCTT',
+    k'ATCCACTG',
+    k'GCTTGTCA',
+    k'CAAGCTAG',
+    k'TAAGTGGT',
+    k'CGGACAAC',
+    k'ATATGGAT',
+    k'GCTCATTG',
+    k'ATCTGCCA',
+    k'CTTGGTAT',
+    k'GATCTATC',
+    k'AGCTCGCT',
+    k'CGGAACTG',
+}
+
+tagmentation_inhouse_bc_whitelist_rev_comp = {
+    k'GGTCACGA',
+    k'TCTCTACT',
+    k'GCAGAATT',
+    k'GCGGCACA',
+    k'CTGCTTCC',
+    k'AGTTCAGG',
+    k'AACTGTAG',
+    k'ATGAGGCC',
+    k'GACCTGAA',
+    k'TCGATATC',
+    k'AAGATACT',
+    k'CGCCGATC',
+    k'CCATTCGA',
+    k'CTCTCGTC',
+    k'AACGTTCC',
+    k'TTACAGGA',
+    k'TGGATCGA',
+    k'TCCAACGC',
+    k'GCGCAAGC',
+    k'CCGTGAAG',
+    k'TAAGGTCA',
+    k'TTGCCTAG',
+    k'GGAGCGTC',
+    k'CTAGCGCT',
+}
+
+tagmentation_inhouse_trial_bc_whitelist_rev_comp = {
+    k'AAAGAAAG',
+    # AACTGTAG  ==> from tagmentation_inhouse_bc_whitelist_rev_comp
+    # || | |||
+    # AAGTATAG
+    k'AAGTATAG',
+    k'AGTAAAAG',
+    # CAAGCTAG  ==> from tagmentation_inhouse_bc_whitelist_rev_comp
+    # | ||| ||
+    # CGAGCAAG
+    k'CGAGCAAG',
+}
+
+tagmentation_bc_whitelist_fwd = {~bc for bc in tagmentation_bc_whitelist_rev_comp}
+tagmentation_inhouse_bc_whitelist_fwd = {~bc for bc in tagmentation_inhouse_bc_whitelist_rev_comp}
+tagmentation_inhouse_trial_bc_whitelist_fwd = {~bc for bc in tagmentation_inhouse_trial_bc_whitelist_rev_comp}
+
+
+def correct_tagmentation_and_10x_atac_bc_in_fastq(
+    tagmentation_bc_whitelist: set[Kmer[8]],
+    tenx_atac_bc_whitelist: set[Kmer[16]],
+    fastq_with_raw_bc_filename: str,
+    fastq_with_corrected_bc_filename: str,
+    corrected_bc_stats_tsv_filename: str,
+    max_hamming_dist: int = 1,
+    min_frac_bcs_to_find: float = min_frac_bcs_to_find_default,
+):
+    """
+    Read FASTQ file with barcodes and append " CB:Z:corrected_10X_scATAC_barcode TB:Z:corrected_tagmentation_barcode" to the FASTQ
+    record comment if the barcode matches the whitelist (exactly or with max
+    max_hamming_dist mismatch).
+
+    Parameters
+    ----------
+    tagmentation_bc_whitelist:
+        Tagmentation barcode whitelist.
+    tenx_atac_bc_whitelist:
+        10x ATAC barcode whitelist.
+    fastq_with_raw_bc_filename:
+        Input FASTQ file with raw barcode reads.
+    fastq_with_corrected_bc_filename:
+        Output FASTQ file with corrected barcode reads in the FASTQ record comment.
+    corrected_bc_stats_tsv_filename:
+        File with barcode correction statistics.
+    max_hamming_dist:
+        Maximum hamming distance allowed for the barcode to consider it a match with the whitelist.
+    min_frac_bcs_to_find:
+        Required minimum fraction of barcode reads that need to contain a barcode.
+
+    Returns
+    -------
+    enough_bcs_found, frac_bcs_found
+
+    """
+    if max_hamming_dist > 3 or max_hamming_dist < 0:
+        raise ValueError("Only hamming distances 0, 1, 2 and 3 are supported.")
+
+    # Store number of reads in FASTQ file.
+    total_reads = 0
+
+    # Store per tagmentation barcode the number of reads which have a tagmentation
+    # barcode with a hamming distance of 0, 1, 2 or 3 to the tagmentation barcodes
+    # whitelist.
+    per_tagmentation_bc_mismatches_stats = {
+        str(tagmentation_bc): [0 , 0, 0, 0]
+        for tagmentation_bc in tagmentation_bc_whitelist
+    }
+
+    # Store per tagmentation barcode the number of reads which also have a 10x ATAC
+    # barcode and for which the 10x ATAC barcode has hamming distance of 0, 1, 2 or 3
+    # from the 10x ATAC barcodes whitelist.
+    per_tagmentation_bc_and_with_10x_atac_bc_mismatches_stats = {
+        str(tagmentation_bc): [0 , 0, 0, 0]
+        for tagmentation_bc in tagmentation_bc_whitelist
+    }
+
+    # Store number of reads which have a 10x ATAC barcode with a hamming distance of
+    # 0, 1, 2 or 3 to the 10x ATAC barcodes whitelist.
+    tenx_atac_bc_mismatches_stats = [0 , 0, 0, 0]
+
+    if fastq_with_corrected_bc_filename == "-":
+        fastq_with_corrected_bc_filename = "/dev/stdout"
+
+    with open(fastq_with_corrected_bc_filename, "w") as fastq_with_corrected_bc_fh:
+        for record in bio.FASTQ(fastq_with_raw_bc_filename, gzip=True, validate=False, copy=True):
+            total_reads += 1
+
+            # Get tagmentation + 10x ATAC sequence and associated quality from FASTQ
+            # record, reverse complemented if needed based on the sequencer.
+            (tagmentation_and_10x_atac_bc_seq,
+             tagmentation_and_10x_atac_bc_qual
+             ) = get_seq_and_qual_barcode_read(
+                fastq_record=record,
+                seq_start=0,
+                seq_end=24,
+            )
+
+            # Extract tagmentation barcode sequence and quality.
+            tagmentation_bc_seq = tagmentation_and_10x_atac_bc_seq[0:8]
+            tagmentation_bc_qual = tagmentation_and_10x_atac_bc_qual[0:8]
+
+            # Extract 10x ATAC barcode sequence and quality.
+            tenx_atac_bc_seq = tagmentation_and_10x_atac_bc_seq[8:24]
+            tenx_atac_bc_qual = tagmentation_and_10x_atac_bc_qual[8:24]
+
+            corrected_tagmentation_bc = correct_bc_by_qual_order_with_whitelist_or_correct_bc_with_Ns_with_whitelist(
+                bc_whitelist=tagmentation_bc_whitelist,
+                bc_length=8,
+                bc_seq=tagmentation_bc_seq,
+                bc_qual=tagmentation_bc_qual,
+                max_hamming_dist=max_hamming_dist,
+            )
+
+            corrected_10x_bc = correct_bc_by_qual_order_with_whitelist_or_correct_bc_with_Ns_with_whitelist(
+                bc_whitelist=tenx_atac_bc_whitelist,
+                bc_length=16,
+                bc_seq=tenx_atac_bc_seq,
+                bc_qual=tenx_atac_bc_qual,
+                max_hamming_dist=max_hamming_dist,
+            )
+
+            if corrected_tagmentation_bc:
+                per_tagmentation_bc_mismatches_stats[corrected_tagmentation_bc.corrected_bc][
+                    corrected_tagmentation_bc.hamming_dist
+                ] += 1
+
+            if corrected_10x_bc:
+                tenx_atac_bc_mismatches_stats[corrected_10x_bc.hamming_dist] += 1
+
+            if corrected_10x_bc and corrected_tagmentation_bc:
+                per_tagmentation_bc_and_with_10x_atac_bc_mismatches_stats[
+                    corrected_tagmentation_bc.corrected_bc
+                ][corrected_10x_bc.hamming_dist] += 1
+
+                # Write original FASTQ record if the barcode matched the whitelist (exact match or x mismatches)
+                # and append " CB:Z:corrected_10X_scATAC_barcode" to the FASTQ record comment.
+                fastq_with_corrected_bc_fh.write(
+                    f"@{record.name}" +
+                    f'{" " + record.comment if record.comment else ""} ' +
+                    f"CB:Z:{corrected_10x_bc.corrected_bc} " +
+                    f"TB:Z:{corrected_tagmentation_bc.corrected_bc}\n" +
+                    f"{tenx_atac_bc_seq}\n+\n{tenx_atac_bc_qual}\n"
+                )
+            else:
+                fastq_with_corrected_bc_fh.write(
+                    f"@{record.name}" +
+                    f'{" " + record.comment if record.comment else ""}' +
+                    f'{" CB:Z:" + corrected_10x_bc.corrected_bc if corrected_10x_bc else ""}'
+                    f'{" TB:Z:" + corrected_tagmentation_bc.corrected_bc if corrected_tagmentation_bc else ""}\n' +
+                    f"{tenx_atac_bc_seq}\n+\n{tenx_atac_bc_qual}\n"
+                )
+
+    # Calculate number of tagmentation barcodes found per tagmentation barcode.
+    per_tagmentation_bc_reads = {
+        tagmentation_bc: sum(per_tagmentation_bc_mismatches_stats[tagmentation_bc])
+        for tagmentation_bc in per_tagmentation_bc_mismatches_stats
+    }
+
+    # Calculate number of total tagmentation barcodes found.
+    tagmentation_bc_reads = sum(per_tagmentation_bc_reads.values())
+
+    # Calculate number of total 10x ATAC barcodes found.
+    tenx_atac_bc_reads = sum(tenx_atac_bc_mismatches_stats)
+
+    # Calculate number of 10x ATAC barcodes found per tagmentation barcode.
+    per_tagmentation_bc_and_with_10x_atac_bc_reads = {
+        tagmentation_bc: sum(per_tagmentation_bc_and_with_10x_atac_bc_mismatches_stats[tagmentation_bc])
+        for tagmentation_bc in per_tagmentation_bc_and_with_10x_atac_bc_mismatches_stats
+    }
+
+    # Calculate number of total 10x ATAC barcodes found which also have a tagmentation barcode.
+    tagmentation_bc_and_10x_atac_bc_reads = sum(per_tagmentation_bc_and_with_10x_atac_bc_reads.values())
+
+    reads_without_tagmentation_bc = total_reads - tagmentation_bc_reads
+    reads_without_10x_atac_bc = total_reads - tenx_atac_bc_reads
+    reads_without_both_tagmentation_bc_and_10x_atac_bc = total_reads - tagmentation_bc_and_10x_atac_bc_reads
+
+    with open(corrected_bc_stats_tsv_filename, 'w') as corrected_bc_stats_tsv_fh:
+        corrected_bc_stats_tsv_fh.write(
+            f"reads\t{total_reads}\t100.00%\n" +
+            f"tagmentation_bc_reads\t{tagmentation_bc_reads}\t" +
+            f"{(tagmentation_bc_reads / total_reads * 100.0)}%\n" +
+            f"10x_atac_bc_reads\t{tenx_atac_bc_reads}\t" +
+            f"{(tenx_atac_bc_reads / total_reads * 100.0)}%\n" +
+            f"tagmentation_bc_and_10x_atac_bc_reads\t{tagmentation_bc_and_10x_atac_bc_reads}\n" +
+            f"{(tagmentation_bc_and_10x_atac_bc_reads / total_reads * 100.0)}%\n" +
+            f"reads_without_tagmentation_bc\t{reads_without_tagmentation_bc}\t" +
+            f"{(reads_without_tagmentation_bc / total_reads * 100.0)}%\n" +
+            f"reads_without_10x_atac_bc\t{reads_without_10x_atac_bc}%\t"
+            f"{(reads_without_10x_atac_bc / total_reads * 100.0)}%\n" +
+            f"reads_without_both_tagmentation_bc_and_10x_atac_bc\t" +
+            f"{reads_without_both_tagmentation_bc_and_10x_atac_bc}\n" +
+            f"{(reads_without_both_tagmentation_bc_and_10x_atac_bc / total_reads * 100.0)}%\n"
+        )
+
+        corrected_bc_stats_tsv_fh.write(
+            f"\ntagmentation_bc\treads_with_tagmentation_bc\treads_with_tagmentation_bc_and_10x_atac_bc"
+        )
+
+        for i in range(0, max_hamming_dist + 1):
+            corrected_bc_stats_tsv_fh.write(
+                f"\ttagmentation_bc_with_{i}_mismatches"
+            )
+
+        for i in range(0, max_hamming_dist + 1):
+            corrected_bc_stats_tsv_fh.write(
+                f"\t10x_atac_bc_with_{i}_mismatches"
+            )
+
+        corrected_bc_stats_tsv_fh.write("\n")
+
+        for tagmentation_bc in sorted(per_tagmentation_bc_reads.keys()):
+            corrected_bc_stats_tsv_fh.write(
+                f"{tagmentation_bc}\t" +
+                f"{per_tagmentation_bc_reads[tagmentation_bc]}\t" +
+                f"{per_tagmentation_bc_and_with_10x_atac_bc_reads[tagmentation_bc]}"
+            )
+
+            for i in range(0, max_hamming_dist + 1):
+                corrected_bc_stats_tsv_fh.write(
+                    f"\t{per_tagmentation_bc_mismatches_stats[tagmentation_bc][i]}"
+                )
+
+            for i in range(0, max_hamming_dist + 1):
+                corrected_bc_stats_tsv_fh.write(
+                    f"\t{per_tagmentation_bc_and_with_10x_atac_bc_mismatches_stats[tagmentation_bc][i]}"
+                )
+
+            corrected_bc_stats_tsv_fh.write("\n")
+
+    # Calculate fraction of reads which have both a tagmentation barcode
+    # and a 10x ATAC barcode.
+    frac_bcs_found = tagmentation_bc_and_10x_atac_bc_reads / total_reads
+
+    # Are there enough reads that have both a tagmentation barcode
+    # and a 10x ATAC barcode.
+    enough_bcs_found = (frac_bcs_found >= min_frac_bcs_to_find)
+
+    return enough_bcs_found, frac_bcs_found
+
+
+def main():
+    if len(sys.argv) < 6:
+        print(
+            f"Usage: seqc run -release {sys.argv[0]} " +
+            "tenx_atac_bc_whitelist_filename fastq_with_raw_bc_file fastq_with_corrected_bc_file " +
+            "corrected_bc_stats_file max_mismatches [min_frac_bcs_to_find]",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    else:
+        tenx_atac_bc_whitelist_filename = sys.argv[1]
+        fastq_with_raw_bc_filename = sys.argv[2]
+        fastq_with_corrected_bc_filename = sys.argv[3]
+        corrected_bc_stats_tsv_filename = sys.argv[4]
+        max_mismatches = int(sys.argv[5])
+        min_frac_bcs_to_find = float(sys.argv[6]) if len(sys.argv) == 7 else min_frac_bcs_to_find_default
+
+        # Read 10x ATAC whitelisted barcodes from file and convert to a set of Kmers.
+        tenx_atac_bc_whitelist = read_barcode_whitelist_from_file(
+            bc_whitelist_filename=tenx_atac_bc_whitelist_filename,
+            bc_length=16,
+            bc_column_idx=0,
+            warning=True,
+        )
+
+        # Create tagmentation barcode whitelist.
+        # TODO: provide a parameter to only use the tagmentation barcodes that are actually used.
+        tagmentation_bc_whitelist = tagmentation_bc_whitelist_fwd.copy()
+        tagmentation_bc_whitelist.update(tagmentation_inhouse_bc_whitelist_fwd)
+        tagmentation_bc_whitelist.update(tagmentation_inhouse_trial_bc_whitelist_fwd)
+
+        # Read FASTQ with barcodes and write a FASTQ with corrected barcodes for barcodes
+        # that match the whitelist closely enough, else write the original barcodes.
+        enough_bcs_found, frac_bcs_found = correct_tagmentation_and_10x_atac_bc_in_fastq(
+            tagmentation_bc_whitelist=tagmentation_bc_whitelist,
+            tenx_atac_bc_whitelist=tenx_atac_bc_whitelist,
+            fastq_with_raw_bc_filename=fastq_with_raw_bc_filename,
+            fastq_with_corrected_bc_filename=fastq_with_corrected_bc_filename,
+            corrected_bc_stats_tsv_filename=corrected_bc_stats_tsv_filename,
+            max_hamming_dist=max_mismatches,
+            min_frac_bcs_to_find=min_frac_bcs_to_find,
+        )
+
+        if not enough_bcs_found:
+            print(
+                f"Warning: Only {frac_bcs_found * 100.00}% of the reads have a barcode.",
+                "         Check if you provided the correct barcode whitelist file.\n",
+                sep="\n",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
