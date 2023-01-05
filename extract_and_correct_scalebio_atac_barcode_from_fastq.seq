@@ -91,6 +91,7 @@ def correct_tagmentation_and_10x_atac_bc_from_fastq(
     fastq_with_raw_bc_filename: str,
     corrected_bc_filename: str,
     corrected_bc_stats_tsv_filename: str,
+    bc_suffix: str = "1",
     max_hamming_dist: int = 1,
     min_frac_bcs_to_find: float = min_frac_bcs_to_find_default,
 ):
@@ -113,11 +114,14 @@ def correct_tagmentation_and_10x_atac_bc_from_fastq(
         and qualities and corrected barcode sequences.
     corrected_bc_stats_tsv_filename:
         File with barcode correction statistics.
+    bc_suffix:
+        Barcode suffix to append to corrected barcode sequences. Default: "1".
     max_hamming_dist:
         Maximum hamming distance allowed for the barcode to consider it a match with
-        the whitelist.
+        the whitelist. Default: 1.
     min_frac_bcs_to_find:
         Required minimum fraction of barcode reads that need to contain a barcode.
+        Default: 0.5.
 
     Returns
     -------
@@ -214,7 +218,9 @@ def correct_tagmentation_and_10x_atac_bc_from_fastq(
                     f"@{record.name} " +
                     f"CR:Z:{tagmentation_bc_seq}-{tenx_atac_bc_seq}\t" +
                     f"CY:Z:{tagmentation_bc_qual} {tenx_atac_bc_qual}\t" +
-                    f"CB:Z:{corrected_tagmentation_bc.corrected_bc}-{corrected_10x_bc.corrected_bc}\n"
+                    f"CB:Z:{corrected_tagmentation_bc.corrected_bc}" +
+                    f"-{corrected_10x_bc.corrected_bc}" +
+                    f"{'-' + bc_suffix if bc_suffix else ''}\n"
                 )
             else:
                 # Write original FASTQ record name and raw cell barcode and raw cell
@@ -319,11 +325,11 @@ def correct_tagmentation_and_10x_atac_bc_from_fastq(
 
 
 def main():
-    if len(sys.argv) < 6:
+    if len(sys.argv) < 7:
         print(
             f"Usage: seqc run -release {sys.argv[0]} " +
             "tenx_atac_bc_whitelist_filename fastq_with_raw_bc_file corrected_bc_file " +
-            "corrected_bc_stats_file max_mismatches [min_frac_bcs_to_find]",
+            "corrected_bc_stats_file bc_suffix max_mismatches [min_frac_bcs_to_find]",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -332,8 +338,9 @@ def main():
         fastq_with_raw_bc_filename = sys.argv[2]
         corrected_bc_filename = sys.argv[3]
         corrected_bc_stats_tsv_filename = sys.argv[4]
-        max_mismatches = int(sys.argv[5])
-        min_frac_bcs_to_find = float(sys.argv[6]) if len(sys.argv) == 7 else min_frac_bcs_to_find_default
+        bc_suffix = sys.argv[5]
+        max_mismatches = int(sys.argv[6])
+        min_frac_bcs_to_find = float(sys.argv[7]) if len(sys.argv) == 8 else min_frac_bcs_to_find_default
 
         # Read 10x ATAC whitelisted barcodes from file and convert to a set of Kmers.
         tenx_atac_bc_whitelist = read_barcode_whitelist_from_file(
@@ -357,6 +364,7 @@ def main():
             fastq_with_raw_bc_filename=fastq_with_raw_bc_filename,
             corrected_bc_filename=corrected_bc_filename,
             corrected_bc_stats_tsv_filename=corrected_bc_stats_tsv_filename,
+            bc_suffix=bc_suffix,
             max_hamming_dist=max_mismatches,
             min_frac_bcs_to_find=min_frac_bcs_to_find,
         )

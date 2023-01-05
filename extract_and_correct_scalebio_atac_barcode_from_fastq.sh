@@ -9,16 +9,17 @@ extract_and_correct_scalebio_atac_barcode_from_fastq () {
     local tenx_atac_bc_whitelist_filename="${1}";
     local fastq_with_raw_bc_filename="${2}";
     local corrected_bc_filename="${3}";
-    local max_mismatches="${4:-1}";
-    local min_frac_bcs_to_find="${5:-0.5}";
+    local bc_suffix="${4:-1}";
+    local max_mismatches="${5:-1}";
+    local min_frac_bcs_to_find="${6:-0.5}";
 
     if [ ${#@} -lt 3 ] ; then
-        printf 'Usage: extract_and_correct_scalebio_atac_barcode_from_fastq tenx_atac_bc_whitelist_file fastq_with_raw_bc_file corrected_bc_file [max_mismatches] [min_frac_bcs_to_find]\n';
+        printf 'Usage: extract_and_correct_scalebio_atac_barcode_from_fastq tenx_atac_bc_whitelist_file fastq_with_raw_bc_file corrected_bc_file [bc_suffix] [max_mismatches] [min_frac_bcs_to_find]\n';
         return 1;
     fi
 
     if [ ! -e "${tenx_atac_bc_whitelist_filename}" ] ; then
-        printf 'Error: Barcode whitelist file "%s" could not be found.\n' "${tenx_atac_bc_whitelist_filename}" >&2;
+        printf 'Error: 10x ATAC barcode whitelist file "%s" could not be found.\n' "${tenx_atac_bc_whitelist_filename}" >&2;
         return 1;
     fi
 
@@ -64,6 +65,7 @@ extract_and_correct_scalebio_atac_barcode_from_fastq () {
             "${fastq_with_raw_bc_filename}" \
             "/dev/stdout" \
             "${corrected_bc_filename}.corrected_bc_stats.tsv" \
+            "${bc_suffix}" \
             "${max_mismatches}" \
             "${min_frac_bcs_to_find}" \
       | pigz -p 4 \
