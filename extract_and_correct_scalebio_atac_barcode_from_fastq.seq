@@ -85,19 +85,20 @@ tagmentation_inhouse_bc_whitelist_fwd = {~bc for bc in tagmentation_inhouse_bc_w
 tagmentation_inhouse_trial_bc_whitelist_fwd = {~bc for bc in tagmentation_inhouse_trial_bc_whitelist_rev_comp}
 
 
-def correct_tagmentation_and_10x_atac_bc_in_fastq(
+def correct_tagmentation_and_10x_atac_bc_from_fastq(
     tagmentation_bc_whitelist: set[Kmer[8]],
     tenx_atac_bc_whitelist: set[Kmer[16]],
     fastq_with_raw_bc_filename: str,
-    fastq_with_corrected_bc_filename: str,
+    corrected_bc_filename: str,
     corrected_bc_stats_tsv_filename: str,
     max_hamming_dist: int = 1,
     min_frac_bcs_to_find: float = min_frac_bcs_to_find_default,
 ):
     """
-    Read FASTQ file with barcodes and append " CB:Z:corrected_10X_scATAC_barcode TB:Z:corrected_tagmentation_barcode" to the FASTQ
-    record comment if the barcode matches the whitelist (exactly or with max
-    max_hamming_dist mismatch).
+    Read ScaleBio index 2 FASTQ file with read name, tagmentation and 10x ATAC barcodes
+    and get raw tagmentation and 10x ATAC barcode sequences and qualities and corrected
+    barcode sequences (if the barcode matches the whitelists (exactly or with max
+    max_hamming_dist mismatch)).
 
     Parameters
     ----------
@@ -107,12 +108,14 @@ def correct_tagmentation_and_10x_atac_bc_in_fastq(
         10x ATAC barcode whitelist.
     fastq_with_raw_bc_filename:
         Input FASTQ file with raw barcode reads.
-    fastq_with_corrected_bc_filename:
-        Output FASTQ file with corrected barcode reads in the FASTQ record comment.
+    corrected_bc_filename:
+        Output file with read name and raw tagmentation and 10x ATAC barcode sequences
+        and qualities and corrected barcode sequences.
     corrected_bc_stats_tsv_filename:
         File with barcode correction statistics.
     max_hamming_dist:
-        Maximum hamming distance allowed for the barcode to consider it a match with the whitelist.
+        Maximum hamming distance allowed for the barcode to consider it a match with
+        the whitelist.
     min_frac_bcs_to_find:
         Required minimum fraction of barcode reads that need to contain a barcode.
 
@@ -147,10 +150,10 @@ def correct_tagmentation_and_10x_atac_bc_in_fastq(
     # 0, 1, 2 or 3 to the 10x ATAC barcodes whitelist.
     tenx_atac_bc_mismatches_stats = [0 , 0, 0, 0]
 
-    if fastq_with_corrected_bc_filename == "-":
-        fastq_with_corrected_bc_filename = "/dev/stdout"
+    if corrected_bc_filename == "-":
+        corrected_bc_filename = "/dev/stdout"
 
-    with open(fastq_with_corrected_bc_filename, "w") as fastq_with_corrected_bc_fh:
+    with open(corrected_bc_filename, "w") as corrected_bc_fh:
         for record in bio.FASTQ(fastq_with_raw_bc_filename, gzip=True, validate=False, copy=True):
             total_reads += 1
 
@@ -201,22 +204,29 @@ def correct_tagmentation_and_10x_atac_bc_in_fastq(
                     corrected_tagmentation_bc.corrected_bc
                 ][corrected_10x_bc.hamming_dist] += 1
 
-                # Write original FASTQ record if the barcode matched the whitelist (exact match or x mismatches)
-                # and append " CB:Z:corrected_10X_scATAC_barcode" to the FASTQ record comment.
-                fastq_with_corrected_bc_fh.write(
-                    f"@{record.name}" +
-                    f'{" " + record.comment if record.comment else ""} ' +
-                    f"CB:Z:{corrected_10x_bc.corrected_bc} " +
-                    f"TB:Z:{corrected_tagmentation_bc.corrected_bc}\n" +
-                    f"{tenx_atac_bc_seq}\n+\n{tenx_atac_bc_qual}\n"
+                # Write original FASTQ record name and raw cell barcode, raw cell
+                # barcode quality and corrected cell barcode:
+                #   - multiple cell barcode sequence strings should be concatenated
+                #     with dashes.
+                #   - multiple cell barcode quality strings should be concatenated
+                #     with spaces.
+                corrected_bc_fh.write(
+                    f"@{record.name} " +
+                    f"CR:Z:{tagmentation_bc_seq}-{tenx_atac_bc_seq}\t" +
+                    f"CY:Z:{tagmentation_bc_qual} {tenx_atac_bc_qual}\t" +
+                    f"CB:Z:{corrected_tagmentation_bc.corrected_bc}-{corrected_10x_bc.corrected_bc}\n"
                 )
             else:
-                fastq_with_corrected_bc_fh.write(
-                    f"@{record.name}" +
-                    f'{" " + record.comment if record.comment else ""}' +
-                    f'{" CB:Z:" + corrected_10x_bc.corrected_bc if corrected_10x_bc else ""}'
-                    f'{" TB:Z:" + corrected_tagmentation_bc.corrected_bc if corrected_tagmentation_bc else ""}\n' +
-                    f"{tenx_atac_bc_seq}\n+\n{tenx_atac_bc_qual}\n"
+                # Write original FASTQ record name and raw cell barcode and raw cell
+                # barcode quality:
+                #   - multiple cell barcode sequence strings should be concatenated
+                #     with dashes.
+                #   - multiple cell barcode quality strings should be concatenated
+                #     with spaces.
+                corrected_bc_fh.write(
+                    f"@{record.name} " +
+                    f"CR:Z:{tagmentation_bc_seq}-{tenx_atac_bc_seq}\t" +
+                    f"CY:Z:{tagmentation_bc_qual} {tenx_atac_bc_qual}\n"
                 )
 
     # Calculate number of tagmentation barcodes found per tagmentation barcode.
@@ -312,7 +322,7 @@ def main():
     if len(sys.argv) < 6:
         print(
             f"Usage: seqc run -release {sys.argv[0]} " +
-            "tenx_atac_bc_whitelist_filename fastq_with_raw_bc_file fastq_with_corrected_bc_file " +
+            "tenx_atac_bc_whitelist_filename fastq_with_raw_bc_file corrected_bc_file " +
             "corrected_bc_stats_file max_mismatches [min_frac_bcs_to_find]",
             file=sys.stderr,
         )
@@ -320,7 +330,7 @@ def main():
     else:
         tenx_atac_bc_whitelist_filename = sys.argv[1]
         fastq_with_raw_bc_filename = sys.argv[2]
-        fastq_with_corrected_bc_filename = sys.argv[3]
+        corrected_bc_filename = sys.argv[3]
         corrected_bc_stats_tsv_filename = sys.argv[4]
         max_mismatches = int(sys.argv[5])
         min_frac_bcs_to_find = float(sys.argv[6]) if len(sys.argv) == 7 else min_frac_bcs_to_find_default
@@ -341,11 +351,11 @@ def main():
 
         # Read FASTQ with barcodes and write a FASTQ with corrected barcodes for barcodes
         # that match the whitelist closely enough, else write the original barcodes.
-        enough_bcs_found, frac_bcs_found = correct_tagmentation_and_10x_atac_bc_in_fastq(
+        enough_bcs_found, frac_bcs_found = correct_tagmentation_and_10x_atac_bc_from_fastq(
             tagmentation_bc_whitelist=tagmentation_bc_whitelist,
             tenx_atac_bc_whitelist=tenx_atac_bc_whitelist,
             fastq_with_raw_bc_filename=fastq_with_raw_bc_filename,
-            fastq_with_corrected_bc_filename=fastq_with_corrected_bc_filename,
+            corrected_bc_filename=corrected_bc_filename,
             corrected_bc_stats_tsv_filename=corrected_bc_stats_tsv_filename,
             max_hamming_dist=max_mismatches,
             min_frac_bcs_to_find=min_frac_bcs_to_find,
