@@ -1,4 +1,18 @@
 #!/bin/bash
+#
+# Copyright (C) 2020-2023 - Gert Hulselmans
+#
+# Purpose:
+#   Read index 2 FASTQ file with raw barcode reads and correct them
+#   according to the provided whitelist.
+#
+#   For each FASTQ record, return:
+#     - read name
+#     - raw barcode sequences (CR:Z:bc_raw_seq)
+#     - raw barcode qualities (CY:Z:bc_raw_qual)
+#     - corrected barcode sequences (CB:z:bc_corrected_seq-bc_suffix)
+#       (if raw barcode sequence was correctable.)
+
 
 set -e
 set -o pipefail
@@ -14,7 +28,38 @@ correct_barcode_from_fastq () {
     local min_frac_bcs_to_find="${6:-0.5}";
 
     if [ ${#@} -lt 3 ] ; then
-        printf 'Usage: correct_barcode_from_fastq bc_whitelist_file fastq_with_raw_bc_file corrected_bc_file [bc_suffix] [max_mismatches] [min_frac_bcs_to_find]\n';
+        printf 'Usage:\n';
+        printf '    correct_barcode_from_fastq \\\n';
+        printf '        bc_whitelist_file fastq_with_raw_bc_file corrected_bc_file \\\n';
+        printf '        [bc_suffix] [max_mismatches] [min_frac_bcs_to_find]\n\n';
+        printf 'Purpose:\n';
+        printf '    Read index 2 FASTQ file with raw barcode reads and correct them\n';
+        printf '    according to the provided whitelist.\n\n';
+        printf '    For each FASTQ record, return:\n';
+        printf '      - read name\n';
+        printf '      - raw barcode sequences (CR:Z:bc_raw_seq)\n';
+        printf '      - raw barcode qualities (CY:Z:bc_raw_qual)\n';
+        printf '      - corrected barcode sequences (CB:z:bc_corrected_seq-bc_suffix)\n';
+        printf '        (if raw barcode sequence was correctable.)\n\n';
+        printf 'Arguments:\n';
+        printf '    bc_whitelist_file:\n';
+        printf '        File with barcode whitelist to use to correct raw barcode sequences.\n';
+        printf '    fastq_with_raw_bc_file:\n';
+        printf '        FASTQ index 2 file with raw barcode reads to correct.\n';
+        printf '    corrected_bc_file:\n';
+        printf '        Output file with read name, raw barcode sequence, raw barcode quality\n';
+        printf '        and corrected barcode sequence (if correctable) for each FASTQ record\n';
+        printf '        in FASTQ index 2 file.\n';
+        printf '    bc_suffix:\n';
+        printf '        Barcode suffix to add after corrected barcode sequence.\n';
+        printf '        Default: "1"\n';
+        printf '    max_mismatches\n';
+        printf '        Maximum amount of mismatches allowed between raw barcode and whitelist.\n';
+        printf '        Default: 1\n';
+        printf '    min_frac_bcs_to_find\n';
+        printf '        Minimum fraction of reads that need to have a barcode that matches the\n';
+        printf '        whitelist.\n';
+        printf '        Default: 0.5\n';
         return 1;
     fi
 
