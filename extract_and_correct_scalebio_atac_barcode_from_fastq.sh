@@ -23,15 +23,16 @@ extract_and_correct_scalebio_atac_barcode_from_fastq () {
     local tenx_atac_bc_whitelist_filename="${1}";
     local fastq_with_raw_bc_filename="${2}";
     local corrected_bc_filename="${3}";
-    local bc_suffix="${4:-1}";
-    local max_mismatches="${5:-1}";
-    local min_frac_bcs_to_find="${6:-0.5}";
+    local scalebio_bc_type="${4}";
+    local bc_suffix="${5:-1}";
+    local max_mismatches="${6:-1}";
+    local min_frac_bcs_to_find="${7:-0.5}";
 
-    if [ ${#@} -lt 3 ] ; then
+    if [ ${#@} -lt 4 ] ; then
         printf 'Usage:\n';
         printf '    extract_and_correct_scalebio_atac_barcode_from_fastq \\\n';
         printf '        tenx_atac_bc_whitelist_file fastq_with_raw_bc_file corrected_bc_file \\\n';
-        printf '        [bc_suffix] [max_mismatches] [min_frac_bcs_to_find]\n\n';
+        printf '        scalebio_bc_type [bc_suffix] [max_mismatches] [min_frac_bcs_to_find]\n\n';
         printf 'Purpose:\n';
         printf '    Read ScaleBio index 2 FASTQ file with raw barcode reads and correct them\n';
         printf '    according to the provided whitelist.\n\n';
@@ -53,6 +54,10 @@ extract_and_correct_scalebio_atac_barcode_from_fastq () {
         printf '        Output file with read name, raw barcode sequence, raw barcode quality\n';
         printf '        and corrected barcode sequence (if correctable) for each FASTQ record\n';
         printf '        in FASTQ index 2 file.\n';
+        printf '    scalebio_bc_type:\n';
+        printf '        ScaleBio tagmentation barcode type set to look for:\n';
+        printf '        "scalebio" (original ScaleBio), "scalebioih" (ScaleBio inhouse),\n';
+        printf '        "scalebioih6" (ScaleBio inhouse trial) and "all".\n';
         printf '    bc_suffix:\n';
         printf '        Barcode suffix to add after corrected barcode sequence.\n';
         printf '        Default: "1"\n';
@@ -112,12 +117,12 @@ extract_and_correct_scalebio_atac_barcode_from_fastq () {
             "${tenx_atac_bc_whitelist_filename}" \
             "${fastq_with_raw_bc_filename}" \
             "/dev/stdout" \
-            "${corrected_bc_filename}.corrected_bc_stats.tsv" \
+            "${corrected_bc_filename%.zst}.corrected_bc_stats.tsv" \
+            "${scalebio_bc_type}" \
             "${bc_suffix}" \
             "${max_mismatches}" \
             "${min_frac_bcs_to_find}" \
-      | pigz -p 4 \
-      > "${corrected_bc_filename}";
+      | zstd -6 -T4 -q -f -o "${corrected_bc_filename%.zst}.zst";
 }
 
 
