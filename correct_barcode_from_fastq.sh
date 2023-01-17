@@ -21,17 +21,18 @@ set -o pipefail
 
 correct_barcode_from_fastq () {
     local bc_whitelist_filename="${1}";
-    local fastq_with_raw_bc_filename="${2}";
-    local corrected_bc_filename="${3}";
-    local bc_suffix="${4:-1}";
-    local max_mismatches="${5:-1}";
-    local min_frac_bcs_to_find="${6:-0.5}";
+    local bc_remapping_filename="${2}";
+    local fastq_with_raw_bc_filename="${3}";
+    local corrected_bc_filename="${4}";
+    local bc_suffix="${5:-1}";
+    local max_mismatches="${6:-1}";
+    local min_frac_bcs_to_find="${7:-0.5}";
 
-    if [ ${#@} -lt 3 ] ; then
+    if [ ${#@} -lt 4 ] ; then
         printf 'Usage:\n';
         printf '    correct_barcode_from_fastq \\\n';
-        printf '        bc_whitelist_file fastq_with_raw_bc_file corrected_bc_file \\\n';
-        printf '        [bc_suffix] [max_mismatches] [min_frac_bcs_to_find]\n\n';
+        printf '        bc_whitelist_file bc_remapping_file fastq_with_raw_bc_file \\\n';
+        printf '        corrected_bc_file [bc_suffix] [max_mismatches] [min_frac_bcs_to_find]\n\n';
         printf 'Purpose:\n';
         printf '    Read index 2 FASTQ file with raw barcode reads and correct them\n';
         printf '    according to the provided whitelist.\n\n';
@@ -44,6 +45,10 @@ correct_barcode_from_fastq () {
         printf 'Arguments:\n';
         printf '    bc_whitelist_file:\n';
         printf '        File with barcode whitelist to use to correct raw barcode sequences.\n';
+        printf '    bc_remapping_file:\n';
+        printf '        File with barcodes to use for mapping corrected barcodes to other\n';
+        printf '        barcodes (e.g. map 10x multiome ATAC barcodes to 10X multiome RNA\n';
+        printf '        barcodes). Set to "false" or "none" to disable remapping.\n';
         printf '    fastq_with_raw_bc_file:\n';
         printf '        FASTQ index 2 file with raw barcode reads to correct.\n';
         printf '    corrected_bc_file:\n';
@@ -67,6 +72,16 @@ correct_barcode_from_fastq () {
         printf 'Error: Barcode whitelist file "%s" could not be found.\n' "${bc_whitelist_filename}" >&2;
         return 1;
     fi
+
+    case "${bc_remapping_filename,,}" in
+        ""|false|none)
+            ;;
+        *)
+            if [ ! -e "${bc_remapping_filename}" ] ; then
+                printf 'Error: Barcode remapping file "%s" could not be found.\n' "${bc_remapping_filename}" >&2;
+                return 1;
+            fi;;
+    esac
 
     if [ ! -e "${fastq_with_raw_bc_filename}" ] ; then
         printf 'Error: FASTQ file with raw barcodes "%s" could not be found.\n' "${fastq_with_raw_bc_filename}" >&2;
@@ -109,6 +124,7 @@ correct_barcode_from_fastq () {
         -release \
         "${script_dir}/correct_barcode_from_fastq.seq" \
             "${bc_whitelist_filename}" \
+            "${bc_remapping_filename}" \
             "${fastq_with_raw_bc_filename}" \
             "/dev/stdout" \
             "${corrected_bc_filename}.corrected_bc_stats.tsv" \

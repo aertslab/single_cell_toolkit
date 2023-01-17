@@ -51,6 +51,90 @@ def read_barcode_whitelist_from_file(
     return bc_whitelist
 
 
+def read_barcode_whitelist_from_file_as_list(
+    bc_whitelist_filename: str,
+    bc_column_idx: int = 0,
+    warning: bool=True
+):
+    """
+    Read whitelisted barcodes from file as a list.
+    """
+
+    bc_whitelist = list()
+    bc_length_prev_line = -1
+
+    for bc_line in read_line_from_uncompressed_or_gzipped_file(bc_whitelist_filename):
+        bc_str = bc_line.strip().split('\t')[bc_column_idx]
+        bc_length_current_line = len(bc_str)
+
+        if bc_length_current_line == 0 or bc_str[0] == "#":
+            # Skip empty lines and lines that start with a comment.
+            continue
+
+        if bc_length_prev_line != -1:
+            if bc_length_prev_line != bc_length_current_line:
+                # Skip barcodes if they have a different length than the Kmer length.
+                if warning:
+                    print(
+                        f'Warning: Barcode "{bc_str}" is skipped (barcode length of ' +
+                        f"{bc_length_current_line} instead of {bc_length_prev_line}).",
+                        file=sys.stderr
+                    )
+                continue
+
+        if 'N' in bc_str:
+            # Skip barcodes if they have an N.
+            if warning:
+                print(
+                    f'Warning: Barcode "{bc_str}" is skipped as it contains an "N".',
+                    file=sys.stderr
+                )
+            continue
+
+        bc_whitelist.append(bc_str)
+        bc_length_prev_line = bc_length_current_line
+
+    return bc_whitelist
+
+
+def map_barcodes_from_whitelist1_to_whitelist2(
+    bc_whitelist_filename: str,
+    bc_remapping_filename: Optional[str],
+    bc_column_idxs: tuple[int, int] = (0, 0),
+    warning: bool = True
+) -> Optional[dict[str, str]]:
+    """
+    Create barcode mapping from barcodes in file 1 to barcodes in file 2.
+
+    If bc_remapping_filename is None, "", "none" or "false", no barcode mapping is created.
+    """
+
+    if not bc_remapping_filename:
+        return None
+    elif bc_remapping_filename.lower() == "none" or bc_remapping_filename.lower() == "false":
+        return None
+
+    bc_whitelist = read_barcode_whitelist_from_file_as_list(
+        bc_whitelist_filename=bc_whitelist_filename,
+        bc_column_idx=bc_column_idxs[0],
+        warning=warning,
+    )
+
+    bc_remapping_whitelist = read_barcode_whitelist_from_file_as_list(
+        bc_whitelist_filename=bc_remapping_filename,
+        bc_column_idx=bc_column_idxs[1],
+        warning=warning,
+    )
+
+    if len(bc_whitelist) != len(bc_remapping_whitelist):
+        raise ValueError(
+            "Barcode whitelists do not have the same number of barcodes: " +
+            f"{len(bc_whitelist)} vs {len(bc_remapping_whitelist)}'"
+        )
+
+    return {bc1: bc2 for bc1, bc2 in zip(bc_whitelist, bc_remapping_whitelist)}
+
+
 def hamming_dist1_neighbors(kmer):
     """
     Yield all kmers with hamming distance of 1.
