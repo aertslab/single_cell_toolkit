@@ -198,7 +198,7 @@ def sub_sample_fragments(
     #   - Original dataframe has a count per fragment with the same cell barcode.
     #   - Create a row for each count, so we can sample fairly afterwards.
     logger.info("Create dataframe with all fragments (for sampling).")
-    fragments_all_df = fragments_df.with_column(
+    fragments_all_df = fragments_df.with_columns(
         pl.col("FragmentCount").repeat_by(
             pl.col("FragmentCount")
         )

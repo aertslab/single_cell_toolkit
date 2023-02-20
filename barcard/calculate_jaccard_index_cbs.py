@@ -30,12 +30,10 @@ def calculate_jaccard_index_cbs(
             new_columns=["chrom", "start", "end", "CB", "CB_count"],
         )
         .with_columns(
-            [
-                pl.col("chrom").cast(pl.Categorical),
-                pl.col("CB").cast(pl.Categorical),
-            ]
+            pl.col("chrom").cast(pl.Categorical),
+            pl.col("CB").cast(pl.Categorical),
         )
-        .with_column(pl.col("CB").count().over("CB").alias("per_CB_count"))
+        .with_columns(pl.col("CB").count().over("CB").alias("per_CB_count"))
         .filter(pl.col("per_CB_count") >= min_frags_per_CB)
     )
 
@@ -125,12 +123,10 @@ def calculate_jaccard_index_cbs(
         .with_columns(
             # Convert categorical CB columns to strings so "<" will sort based
             # on lexicographic order (instead of numerical categorical order).
-            [
-                pl.col("CB1").cast(pl.Utf8).alias("CB1_str"),
-                pl.col("CB2").cast(pl.Utf8).alias("CB2_str"),
-            ]
+            pl.col("CB1").cast(pl.Utf8).alias("CB1_str"),
+            pl.col("CB2").cast(pl.Utf8).alias("CB2_str"),
         )
-        .with_column(
+        .with_columns(
             # Make new "CB1_CB2" column with CB1 and CB2 sorted
             # so CB1 vs CB2 and CB2 vs CB1 give the same value,
             # so we can group on that value to not count the
@@ -162,7 +158,7 @@ def calculate_jaccard_index_cbs(
             # Remove unneeded column.
             ["CB1_CB2"],
         )
-        .with_column(
+        .with_columns(
             # Calculate Jaccard index for CB1 vs CB2.
             (
                 pl.col("CB1_vs_CB2_intersection")
@@ -178,7 +174,7 @@ def calculate_jaccard_index_cbs(
             by=["jaccard"],
             reverse=True,
         )
-        .with_column(
+        .with_columns(
             # Include rank based on Jaccard index value.
             pl.col("jaccard")
             .rank(method="ordinal", reverse=True)
