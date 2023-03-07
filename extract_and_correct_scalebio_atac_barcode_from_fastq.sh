@@ -61,10 +61,10 @@ extract_and_correct_scalebio_atac_barcode_from_fastq () {
         printf '    bc_suffix:\n';
         printf '        Barcode suffix to add after corrected barcode sequence.\n';
         printf '        Default: "1"\n';
-        printf '    max_mismatches\n';
+        printf '    max_mismatches:\n';
         printf '        Maximum amount of mismatches allowed between raw barcode and whitelists.\n';
         printf '        Default: 1\n';
-        printf '    min_frac_bcs_to_find\n';
+        printf '    min_frac_bcs_to_find:\n';
         printf '        Minimum fraction of reads that need to have a barcode that matches the\n';
         printf '        whitelist.\n';
         printf '        Default: 0.5\n';
