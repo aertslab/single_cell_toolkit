@@ -19,7 +19,7 @@ def get_orig_cb_idx_to_cb(barcodes_tsv_filename):
         comment_char="#",
         columns=["column_1"],
         new_columns=["CB"],
-    ).with_row_count("CB_idx_orig")
+    ).with_row_count("CB_idx_orig", offset=1)
 
     return cb_idx_orig_to_cb_df
 
@@ -75,7 +75,7 @@ def write_filtered_barcodes_and_matrix_mtx(
             on="CB_idx_orig",
         )
         # And create a new CB idx value for those selected CBs.
-        .with_row_count("CB_idx_new")
+        .with_row_count("CB_idx_new", offset=1)
         .select(pl.col(["CB", "CB_idx_orig", "CB_idx_new"]))
     ).collect(streaming=True)
 
@@ -93,8 +93,7 @@ def write_filtered_barcodes_and_matrix_mtx(
         .join(
             filtered_cb_idx_orig_to_cb_idx_new_df.lazy(),
             how="left",
-            left_on="CB_idx",
-            right_on="CB_idx_orig",
+            on="CB_idx_orig",
         )
         .select(
             pl.col("feature_idx"),
