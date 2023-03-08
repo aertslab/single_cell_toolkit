@@ -81,6 +81,10 @@ def write_filtered_barcodes_and_matrix_mtx(
 
     # Write filtered list of CBs to barcodes filename.
     with xopen.xopen(barcodes_tsv_out_filename, "wb") as fh_barcodes_tsv:
+        # Polars requires "read" and "seek" methods to be available for now.
+        fh_barcodes_tsv.read = NotImplementedError
+        fh_barcodes_tsv.seek = NotImplementedError
+
         filtered_cb_idx_orig_to_cb_idx_new_df.select(pl.col("CB")).write_csv(
             fh_barcodes_tsv,
             has_header=False,
@@ -104,6 +108,10 @@ def write_filtered_barcodes_and_matrix_mtx(
 
     # Write output MatrixMarket matrix file.
     with xopen.xopen(mtx_out_filename, "wb") as fh_matrix_mtx:
+        # Polars requires "read" and "seek" methods to be available for now.
+        fh_matrix_mtx.read = NotImplementedError
+        fh_matrix_mtx.seek = NotImplementedError
+
         # Write MatrixMarket matrix header from original file.
         fh_matrix_mtx.write(matrix_mtx_header)
 
