@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
 import argparse
-import gzip
 import os
 import shutil
 import sys
+
+import xopen
 
 import polars as pl
 
@@ -27,7 +28,7 @@ def read_mtx(matrix_mtx_filename):
     """Read MatrixMarket matrix file as Polars DataFrame and a header (first 3 lines)."""
     matrix_mtx_header = b""
 
-    with gzip.open(matrix_mtx_filename, "r") as fh:
+    with xopen.xopen(matrix_mtx_filename, "rb") as fh:
         for idx, line in enumerate(fh):
             if idx == 0:
                 if line != b"%%MatrixMarket matrix coordinate integer general\n":
@@ -79,10 +80,11 @@ def write_filtered_barcodes_and_matrix_mtx(
     ).collect(streaming=True)
 
     # Write filtered list of CBs to barcodes filename.
-    filtered_cb_idx_orig_to_cb_idx_new_df.select(pl.col("CB")).write_csv(
-        barcodes_tsv_out_filename,
-        has_header=False,
-    )
+    with xopen.xopen(barcodes_tsv_out_filename, "wb") as fh_barcodes_tsv:
+        filtered_cb_idx_orig_to_cb_idx_new_df.select(pl.col("CB")).write_csv(
+            fh_barcodes_tsv,
+            has_header=False,
+        )
 
     # Correct CB idx column in MatrixMarket matrix dataframe by mapping the original
     # CB indices to the filtered list of CB indices.
@@ -102,7 +104,7 @@ def write_filtered_barcodes_and_matrix_mtx(
     ).collect(streaming=True)
 
     # Write output MatrixMarket matrix file.
-    with open(mtx_out_filename, "wb") as fh_matrix_mtx:
+    with xopen.xopen(mtx_out_filename, "wb") as fh_matrix_mtx:
         # Write MatrixMarket matrix header from original file.
         fh_matrix_mtx.write(matrix_mtx_header)
 
@@ -141,7 +143,7 @@ def main():
 
     args = parser.parse_args()
 
-    if os.realpath(args.input_dir) == os.realpath(args.output_dir):
+    if os.path.realpath(args.input_dir) == os.path.realpath(args.output_dir):
         print(
             "Error: Input and output dir can not be the same.",
             file=sys.stderr,
@@ -164,11 +166,47 @@ def main():
 
     barcodes_tsv_filename = os.path.join(args.input_dir, "barcodes.tsv")
     features_tsv_filename = os.path.join(args.input_dir, "features.tsv")
-    matrix_mtx_filename = os.path.join(args.input_dir, "matrix.mtx.gz")
+    matrix_mtx_filename = os.path.join(args.input_dir, "matrix.mtx")
 
-    barcodes_tsv_out_filename = os.path.join(args.output_dir, "barcodes.tsv")
-    features_tsv_out_filename = os.path.join(args.output_dir, "features.tsv")
-    matrix_mtx_out_filename = os.path.join(args.output_dir, "matrix.mtx.gz")
+    if not os.path.exists(barcodes_tsv_filename):
+        if os.path.exists(barcodes_tsv_filename + ".gz"):
+            barcodes_tsv_filename += ".gz"
+        else:
+            print(
+                f'Error: Barcode TSV file "{barcodes_tsv_filename}" or "{barcodes_tsv_filename + ".gz"}" does not exist.',
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    if not os.path.exists(features_tsv_filename):
+        if os.path.exists(features_tsv_filename + ".gz"):
+            features_tsv_filename += ".gz"
+        else:
+            print(
+                f'Error: Features TSV file "{features_tsv_filename}" or "{features_tsv_filename + ".gz"}" does not exist.',
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    if not os.path.exists(matrix_mtx_filename):
+        if os.path.exists(matrix_mtx_filename + ".gz"):
+            matrix_mtx_filename += ".gz"
+        else:
+            print(
+                f'Error: Matrix mtx file "{matrix_mtx_filename}" or "{matrix_mtx_filename + ".gz"}" does not exist.',
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    barcodes_tsv_out_filename = os.path.join(
+        args.output_dir, os.path.basename(barcodes_tsv_filename)
+    )
+    features_tsv_out_filename = os.path.join(
+        args.output_dir, os.path.basename(features_tsv_filename)
+    )
+    matrix_mtx_out_filename = os.path.join(
+        args.output_dir, os.path.basename(matrix_mtx_filename)
+    )
 
     # Read barcodes TSV file and create a Polars DataFrame with original CB indices
     # and CB names.
