@@ -58,21 +58,6 @@ def read_bc_and_counts_from_fragments_file(fragments_bed_filename: str) -> pl.Da
     Polars dataframe with cell barcode and count per fragment (column 4 and 5 of BED file).
     """
 
-    bed_column_names = (
-        "Chromosome",
-        "Start",
-        "End",
-        "Name",
-        "Score",
-        "Strand",
-        "ThickStart",
-        "ThickEnd",
-        "ItemRGB",
-        "BlockCount",
-        "BlockSizes",
-        "BlockStarts",
-    )
-
     # Set the correct open function depending if the fragments BED file is gzip compressed or not.
     open_fn = gzip.open if fragments_bed_filename.endswith(".gz") else open
 
@@ -100,14 +85,13 @@ def read_bc_and_counts_from_fragments_file(fragments_bed_filename: str) -> pl.Da
             f'"{fragments_bed_filename}" contains only {nbr_columns} columns.'
         )
 
-    # Read cell barcode (column 4) and counts (column 5) per fragemnt from fragments BED file.
+    # Read cell barcode (column 4) and counts (column 5) per fragment from fragments BED file.
     fragments_df = pl.read_csv(
         fragments_bed_filename,
         has_header=False,
         skip_rows=skip_rows,
-        sep="\t",
+        separator="\t",
         use_pyarrow=False,
-        n_threads=6,
         columns=["column_1", "column_2", "column_3", "column_4", "column_5"],
         new_columns=["Chromosome", "Start", "End", "CellBarcode", "FragmentCount"],
         dtypes=[pl.Categorical, pl.UInt32, pl.UInt32, pl.Categorical, pl.UInt32],
@@ -245,7 +229,7 @@ def sub_sample_fragments(
             "fragments with good barcodes."
         )
         fragments_sampled_for_good_bc_df = good_cell_barcodes.join(
-            fragments_all_df.sample(frac=sampling_fraction),
+            fragments_all_df.sample(fraction=sampling_fraction),
             left_on="CellBarcode",
             right_on="CellBarcode",
             how="left",
@@ -452,7 +436,7 @@ def main():
     percentages = [float(x) for x in args.percentages.split(",")]
 
     # Enable global string cache.
-    pl.toggle_string_cache(True)
+    pl.enable_string_cache(True)
 
     # Load fragments BED file.
     logger.info("Loading fragments BED file started.")
