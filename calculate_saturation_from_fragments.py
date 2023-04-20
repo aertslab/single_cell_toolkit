@@ -1,22 +1,16 @@
 #!/usr/bin/env python
 
-### load libs
 import argparse
 import gzip
 import logging
-import pandas as pd
-import numpy as np
 import os
-from scipy.optimize import curve_fit
-from uncertainties import ufloat
+
 import matplotlib.pylab as plt
-import bisect
-import random
-from collections import Counter
-from collections.abc import Sequence
+import numpy as np
+import pandas as pd
+from scipy.optimize import curve_fit
 
 import polars as pl
-
 
 __author__ = "Swann Floc Hlay"
 __contributors__ = "Gert Hulselmans"
