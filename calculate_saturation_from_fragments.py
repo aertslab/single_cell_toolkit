@@ -124,11 +124,11 @@ def sub_sample_fragments(
     # Initialize dataframe for storing all statistics results.
     stats_df = pd.DataFrame(
         {
+            "total_unique_frag_count": np.zeros(sampling_fractions_length, np.uint32),
+            "total_frag_count": np.zeros(sampling_fractions_length, np.uint32),
             "mean_frag_per_bc": np.zeros(sampling_fractions_length, np.float64),
             "median_uniq_frag_per_bc": np.zeros(sampling_fractions_length, np.float64),
-            "total_frag_count": np.zeros(sampling_fractions_length, np.uint32),
             "cell_barcode_count": np.zeros(sampling_fractions_length, np.uint32),
-            "duplication_rate": np.zeros(sampling_fractions_length, np.uint32),
         },
         index=pd.Index(data=np.array(sampling_fractions), name="sampling_fraction"),
     )
@@ -155,15 +155,26 @@ def sub_sample_fragments(
         logger.info(f"Keep fragments with good barcodes.")
         fragments_for_good_bc_df = good_cell_barcodes.join(
             fragments_df,
-            left_on="CellBarcode",
-            right_on="CellBarcode",
+            on="CellBarcode",
             how="left",
         )
 
         logger.info("Calculate total number of fragments.")
+
         stats_df.loc[1.0, "total_frag_count"] = fragments_for_good_bc_df.select(
-            [pl.col("FragmentCount").sum().alias("TotalFragCount")]
-        )["TotalFragCount"][0]
+            pl.col("FragmentCount").sum()
+        ).item()
+
+        logger.info("Calculate total unique number of fragments.")
+
+        stats_df.loc[1.0, "total_unique_frag_count"] = (
+            fragments_for_good_bc_df.groupby(
+                ["CellBarcode", "Chromosome", "Start", "End"]
+            )
+            .agg([pl.first("Start").alias("Start_tmp")])
+            .select(pl.count())
+            .item()
+        )
 
         logger.info(
             "Calculate mean number of fragments per barcode and median number of "
@@ -196,7 +207,7 @@ def sub_sample_fragments(
 
     # Create dataframe where each row contains one fragment:
     #   - Original dataframe has a count per fragment with the same cell barcode.
-    #   - Create a row for each count, so we can sample fairly afterwards.
+    #   - Create a row for each count, so we can sample fairly afterward.
     logger.info("Create dataframe with all fragments (for sampling).")
     fragments_all_df = fragments_df.with_columns(
         pl.col("FragmentCount").repeat_by(pl.col("FragmentCount"))
@@ -235,10 +246,19 @@ def sub_sample_fragments(
             how="left",
         )
 
-        # Get number of sampled fragments (with possible duplicate fragments) which
-        # have good barcodes.
+        logger.info("Calculate total number of fragments.")
         stats_df.loc[sampling_fraction, "total_frag_count"] = (
             fragments_sampled_for_good_bc_df.height
+        )
+
+        logger.info("Calculate total unique number of fragments.")
+        stats_df.loc[sampling_fraction, "total_unique_frag_count"] = (
+            fragments_sampled_for_good_bc_df.groupby(
+                ["CellBarcode", "Chromosome", "Start", "End"]
+            )
+            .agg([pl.first("Start").alias("Start_tmp")])
+            .select(pl.count())
+            .item()
         )
 
         logger.info("Calculate mean number of fragments per barcode.")
@@ -248,9 +268,8 @@ def sub_sample_fragments(
             )
             .groupby("CellBarcode")
             .agg([pl.count("FragmentCount").alias("FragmentsPerCB")])
-            .select([pl.col("FragmentsPerCB").mean().alias("MeanFragmentsPerCB")])[
-                "MeanFragmentsPerCB"
-            ][0]
+            .select([pl.col("FragmentsPerCB").mean().alias("MeanFragmentsPerCB")])
+            .item()
         )
 
         logger.info("Calculate median number of unique fragments per barcode.")
@@ -262,7 +281,8 @@ def sub_sample_fragments(
             .select([pl.col("CellBarcode"), pl.col("FragmentCount")])
             .groupby("CellBarcode")
             .agg(pl.col("FragmentCount").count().alias("UniqueFragmentsPerCB"))
-            .select(pl.col("UniqueFragmentsPerCB").median())["UniqueFragmentsPerCB"][0]
+            .select(pl.col("UniqueFragmentsPerCB").median())
+            .item()
         )
 
         stats_df.loc[sampling_fraction, "cell_barcode_count"] = nbr_good_cell_barcodes
@@ -296,7 +316,7 @@ def fit_MM(
     x_axis="total_frag_count",
     y_axis="median_uniq_frag_per_bc",
 ):
-    # select x/y data fro MM fit from subsampling stats
+    # select x/y data from MM fit from subsampling stats
     x_data = np.array(stats_df.loc[:, x_axis]) / 10**6
     y_data = np.array(stats_df.loc[:, y_axis])
     # fit to MM function
