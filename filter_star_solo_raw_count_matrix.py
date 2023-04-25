@@ -14,7 +14,7 @@ def get_orig_cb_idx_to_cb(barcodes_tsv_filename):
     """Create a Polars DataFrame with original CB indices and CB names from barcodes TSV file."""
     cb_idx_orig_to_cb_df = pl.read_csv(
         barcodes_tsv_filename,
-        sep="\t",
+        separator="\t",
         has_header=False,
         comment_char="#",
         columns=["column_1"],
@@ -42,7 +42,7 @@ def read_mtx(matrix_mtx_filename):
 
     matrix_mtx_df = pl.read_csv(
         matrix_mtx_filename,
-        sep=" ",
+        separator=" ",
         has_header=False,
         skip_rows=3,
         columns=["column_1", "column_2", "column_3"],
@@ -127,7 +127,7 @@ def write_filtered_barcodes_and_matrix_mtx(
         # Write MatrixMarket matrix dataframe with corrected CB indices.
         matrix_mtx_out_df.write_csv(
             fh_matrix_mtx,
-            sep=" ",
+            separator=" ",
             has_header=False,
         )
 
