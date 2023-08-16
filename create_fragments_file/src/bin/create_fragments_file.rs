@@ -37,37 +37,46 @@ fn create_fragments_file(input_bam_filename: &str) {
             && !record.is_supplementary()
         {
             if let Ok(mate_mapq_aux) = record.aux(b"MQ") {
-                if let Aux::I32(mate_mapq) = mate_mapq_aux {
-                    if mate_mapq >= 30 {
-                        if let Ok(Aux::String(cb)) = record.aux(b"CB") {
-                            // Write output directly as bytes and do not invoke the formatting machinery of rust.
-                            // The code in this block will produce the same output as:
-                            //
-                            // println!(
-                            //     "{}\t{}\t{}\t{}",
-                            //     record.contig(),
-                            //     record.pos() + 4,
-                            //     record.pos() + record.insert_size() - 5,
-                            //     cb
-                            // );
+                // So far MQ tags in BAM files have been of I8 or U8 type.
+                let mate_mapq = match mate_mapq_aux {
+                    Aux::I8(mate_mapq) => mate_mapq as i32,
+                    Aux::I16(mate_mapq) => mate_mapq as i32,
+                    Aux::I32(mate_mapq) => mate_mapq as i32,
+                    Aux::U8(mate_mapq) => mate_mapq as i32,
+                    Aux::U16(mate_mapq) => mate_mapq as i32,
+                    Aux::U32(mate_mapq) => mate_mapq as i32,
+                    _ => -1, //bail!("Value for MQ tag is not an integer."),
+                };
 
-                            stdout.write(record.contig().as_bytes()).unwrap();
-                            stdout.write(b"\t").unwrap();
+                if mate_mapq >= 30 {
+                    if let Ok(Aux::String(cb)) = record.aux(b"CB") {
+                        // Write output directly as bytes and do not invoke the formatting machinery of rust.
+                        // The code in this block will produce the same output as:
+                        //
+                        // println!(
+                        //     "{}\t{}\t{}\t{}",
+                        //     record.contig(),
+                        //     record.pos() + 4,
+                        //     record.pos() + record.insert_size() - 5,
+                        //     cb
+                        // );
 
-                            // Convert start and end of fragments fast from integers to strings.
-                            let mut pos_buffer = itoa::Buffer::new();
-                            let pos_start = pos_buffer.format(record.pos() + 4);
-                            stdout.write(pos_start.as_bytes()).unwrap();
-                            stdout.write(b"\t").unwrap();
+                        stdout.write(record.contig().as_bytes()).unwrap();
+                        stdout.write(b"\t").unwrap();
 
-                            let pos_end =
-                                pos_buffer.format(record.pos() + record.insert_size() - 5);
-                            stdout.write(pos_end.as_bytes()).unwrap();
-                            stdout.write(b"\t").unwrap();
+                        // Convert start and end of fragments fast from integers to strings.
+                        let mut pos_buffer = itoa::Buffer::new();
+                        let pos_start = pos_buffer.format(record.pos() + 4);
+                        stdout.write(pos_start.as_bytes()).unwrap();
+                        stdout.write(b"\t").unwrap();
 
-                            stdout.write(cb.as_bytes()).unwrap();
-                            stdout.write(b"\n").unwrap();
-                        }
+                        let pos_end =
+                            pos_buffer.format(record.pos() + record.insert_size() - 5);
+                        stdout.write(pos_end.as_bytes()).unwrap();
+                        stdout.write(b"\t").unwrap();
+
+                        stdout.write(cb.as_bytes()).unwrap();
+                        stdout.write(b"\n").unwrap();
                     }
                 }
             }
