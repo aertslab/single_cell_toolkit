@@ -306,7 +306,7 @@ def correct_reverse_transcription_and_10x_atac_bc_from_fastq(
             f"{(reverse_transcription_bc_and_10x_atac_bc_reads / total_reads * 100.0)}%\n" +
             f"reads_without_reverse_transcription_bc\t{reads_without_reverse_transcription_bc}\t" +
             f"{(reads_without_reverse_transcription_bc / total_reads * 100.0)}%\n" +
-            f"reads_without_10x_atac_bc\t{reads_without_10x_atac_bc}%\t"
+            f"reads_without_10x_atac_bc\t{reads_without_10x_atac_bc}\t"
             f"{(reads_without_10x_atac_bc / total_reads * 100.0)}%\n" +
             f"reads_without_both_reverse_transcription_bc_and_10x_atac_bc\t" +
             f"{reads_without_both_reverse_transcription_bc_and_10x_atac_bc}\t" +
