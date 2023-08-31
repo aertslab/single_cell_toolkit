@@ -50,8 +50,8 @@ def read_bc_and_counts_from_fragments_file(fragments_bed_filename: str) -> pl.Da
     Returns
     -------
     Polars dataframe with cell barcode and count per fragment (column 4 and 5 of BED file).
-    """
 
+    """
     # Set the correct open function depending if the fragments BED file is gzip compressed or not.
     open_fn = gzip.open if fragments_bed_filename.endswith(".gz") else open
 
@@ -95,13 +95,8 @@ def read_bc_and_counts_from_fragments_file(fragments_bed_filename: str) -> pl.Da
 
 
 def MM(x, Vmax, Km):
-    """
-    Define the Michaelis-Menten Kinetics model that will be used for the model fitting.
-    """
-    if Vmax > 0 and Km > 0:
-        y = (Vmax * x) / (Km + x)
-    else:
-        y = 1e10
+    """Define the Michaelis-Menten Kinetics model that will be used for the model fitting."""
+    y = Vmax * x / (Km + x) if Vmax > 0 and Km > 0 else 10000000000.0
     return y
 
 
@@ -159,7 +154,7 @@ def sub_sample_fragments(
 
         logger.info("Calculate statistics for sampling fraction 100.0%.")
 
-        logger.info(f"Keep fragments with selected cell barcodes.")
+        logger.info("Keep fragments with selected cell barcodes.")
         fragments_for_selected_bcs_df = selected_cbs_df.join(
             fragments_df,
             on="CellBarcode",
@@ -253,9 +248,9 @@ def sub_sample_fragments(
         )
 
         logger.info("Calculate total number of fragments.")
-        stats_df.loc[sampling_fraction, "total_frag_count"] = (
-            fragments_sampled_for_selected_cb_df.height
-        )
+        stats_df.loc[
+            sampling_fraction, "total_frag_count"
+        ] = fragments_sampled_for_selected_cb_df.height
 
         logger.info("Calculate total unique number of fragments.")
         stats_df.loc[sampling_fraction, "total_unique_frag_count"] = (
@@ -356,7 +351,7 @@ def fit_MM(
     plt.text(
         x=x_fit[-1],
         y=y_coef,
-        s=str(round(100 * max(y_data) / best_fit_ab[0])) + "% {:.2f}".format(x_coef),
+        s=str(round(100 * max(y_data) / best_fit_ab[0])) + f"% {x_coef:.2f}",
         c="crimson",
         ha="right",
         va="bottom",
@@ -378,7 +373,7 @@ def fit_MM(
             plt.text(
                 x=x_fit[-1],
                 y=y_coef,
-                s=str(round(100 * perc)) + "% {:.2f}".format(x_coef),
+                s=str(round(100 * perc)) + f"% {x_coef:.2f}",
                 c="grey",
                 ha="right",
                 va="bottom",
