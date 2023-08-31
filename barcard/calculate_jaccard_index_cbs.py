@@ -26,7 +26,7 @@ def calculate_jaccard_index_cbs(
         pl.read_csv(
             fragments_tsv_filename,
             has_header=False,
-            sep="\t",
+            separator="\t",
             new_columns=["chrom", "start", "end", "CB", "CB_count"],
         )
         .with_columns(
@@ -191,7 +191,7 @@ def calculate_jaccard_index_cbs(
     # Write output to TSV file.
     CB1_vs_CB2_jaccard_df.write_csv(
         CB1_vs_CB2_jaccard_tsv_filename,
-        sep="\t",
+        separator="\t",
     )
 
 
@@ -241,8 +241,8 @@ def main() -> None:
         default=None,
         help="Only use specified chromosome names. "
         "Specify chromosomes to keep as a comma or space separated list "
-        '(e.g.: "chr1,chr2,chr3" or "chr1 chr2 chr3") or a regular expression '
-        '(e.g.: "^(chr)?([0-9]+|[XY])$"), or None to keep all chromosomes. '
+        "(e.g.: 'chr1,chr2,chr3' or 'chr1 chr2 chr3') or a regular expression "
+        "(e.g.: '^(chr)?([0-9]+|[XY])$'), or None to keep all chromosomes. "
         "Default: None.",
     )
 

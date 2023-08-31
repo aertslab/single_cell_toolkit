@@ -19,7 +19,7 @@ def merge_cbs_over_jaccard_index_threshold(
     # Read CB1 vs CB2 Jaccard CSV file filtered by Otsu threshold.
     CB1_vs_CB2_jaccard_filtered_df = pl.read_csv(
         CB1_vs_CB2_jaccard_filtered_tsv_filename,
-        sep="\t",
+        separator="\t",
     )
 
     original_CB_to_merged_CBs_df = (
@@ -70,7 +70,7 @@ def merge_cbs_over_jaccard_index_threshold(
     # Write original CB to merged CBs TSV file.
     original_CB_to_merged_CBs_df.write_csv(
         f"{output_fragments_tsv_filename}.original_CB_to_merged_CBs.tsv",
-        sep="\t",
+        separator="\t",
     )
 
     fragments_df = (
@@ -78,7 +78,7 @@ def merge_cbs_over_jaccard_index_threshold(
         pl.read_csv(
             input_fragments_tsv_filename,
             has_header=False,
-            sep="\t",
+            separator="\t",
             new_columns=["chrom", "start", "end", "CB", "CB_count"],
         )
         .join(
@@ -112,7 +112,7 @@ def merge_cbs_over_jaccard_index_threshold(
         .write_csv(
             # Write output fragments TSV file with merged CBs.
             output_fragments_tsv_filename,
-            sep="\t",
+            separator="\t",
             has_header=False,
         )
     )
