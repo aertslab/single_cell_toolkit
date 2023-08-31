@@ -12,7 +12,13 @@ bio-types = "1.0"
 itoa = "1.0"
 grep-cli = "0.1.9"
 termcolor = "1.2.0"
-libz-sys = { default = false, features = ["zlib-ng", "static"] }
+libz-sys = { version = "1.1.12", default = false, features = ["zlib-ng", "static"] }
+needletail = "0.5.1"
+rayon = "1.7"
 
 [profile.dev.package."*"]
 opt-level = 3
+
+[profile.release]
+lto = true
+codegen-units = 1
