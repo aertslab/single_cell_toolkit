@@ -1,5 +1,5 @@
 [package]
-name = "create_fragments_file"
+name = "single_cell_toolkit"
 version = "0.1.0"
 authors = ["Gert Hulselmans <gert.hulselmans@kuleuven.be>"]
 edition = "2021"
@@ -12,6 +12,7 @@ bio-types = "1.0"
 itoa = "1.0"
 grep-cli = "0.1.9"
 termcolor = "1.2.0"
+libz-sys = { default = false, features = ["zlib-ng", "static"] }
 
 [profile.dev.package."*"]
 opt-level = 3
