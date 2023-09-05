@@ -15,6 +15,8 @@ termcolor = "1.2.0"
 libz-sys = { version = "1.1.12", default = false, features = ["zlib-ng", "static"] }
 needletail = "0.5.1"
 rayon = "1.7"
+csv = "1.2.2"
+serde = { version = "1", features = ["derive"] }
 
 [profile.dev.package."*"]
 opt-level = 3
