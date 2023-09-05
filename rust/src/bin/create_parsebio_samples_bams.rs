@@ -8,8 +8,6 @@ use std::process;
 use rust_htslib::bam::{record::Aux, Format, Header, HeaderView, Read, Reader, Writer};
 use rust_htslib::tpool::ThreadPool;
 
-use csv;
-
 // This lets us write `#[derive(Deserialize)]`.
 use serde::Deserialize;
 
@@ -154,7 +152,7 @@ fn parsebio_samples_bam(
     // Construct BAM header for each per sample BAM file by combining headers
     // of each ParseBio sublibrary.
     for (i, sublibrary) in sublibraries.iter().enumerate() {
-        let mut bam = Reader::from_path(Path::new(
+        let bam = Reader::from_path(Path::new(
             sublibrary_to_bam_mapping.get(sublibrary.as_str()).unwrap(),
         ))
         .unwrap();
@@ -169,7 +167,7 @@ fn parsebio_samples_bam(
         }
 
         // Get all "@PG" and "@CO" lines.
-        let filtered_header = filter_bam_header(&original_header, &sublibrary);
+        let filtered_header = filter_bam_header(&original_header, sublibrary);
 
         merged_header.extend(&b"\n"[..]);
         merged_header.extend(&filtered_header);
@@ -233,8 +231,8 @@ fn parsebio_samples_bam(
                 // filtered barcodes.
                 if let Some(sample) = barcode_to_sample_mapping.get(&new_cb) {
                     // Update CB tag value with full barcode name.
-                    record.remove_aux(cb_tag);
-                    record.push_aux(cb_tag, Aux::String(&new_cb));
+                    record.remove_aux(cb_tag).unwrap();
+                    record.push_aux(cb_tag, Aux::String(&new_cb)).unwrap();
 
                     if let Some(bam_writer) = sample_to_bam_writer_mapping.get_mut(sample) {
                         // Write current BAM record to correct per sample BAM file.
