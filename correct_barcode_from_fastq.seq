@@ -139,7 +139,8 @@ def correct_bc_from_fastq(
 
         for i in range(0, max_hamming_dist + 1):
             corrected_bc_stats_tsv_fh.write(
-                f"bc_reads_with_{i}_mismatches\t{bc_mismatches_stats[i]}\n"
+                f"bc_reads_with_{i}_mismatches\t{bc_mismatches_stats[i]}\t"
+                f"{(bc_mismatches_stats[i] / total_reads * 100.0)}%\n"
             )
 
     # Calculate fraction of barcodes found in all reads.
