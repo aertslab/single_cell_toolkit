@@ -1,0 +1,195 @@
+import bio
+import sys
+
+from bio.kmer import Kmer
+from seq_lib.barcode_correction import (
+    correct_bc_by_qual_order_with_whitelist_or_correct_bc_with_Ns_with_whitelist,
+    read_barcode_whitelist_from_file
+)
+from seq_lib.utils import get_seq_and_qual_barcode_read
+
+
+# Minimum percentage of barcodes that should be found before returning with an error.
+min_frac_bcs_to_find_default = 0.5
+
+
+def correct_issaac_seq_barcode_from_fastq(
+    hydrop_rna_bc_whitelist: set[Kmer[30]],
+    fastq_with_raw_bc_filename: str,
+    fastq_with_corrected_bc_filename: str,
+    corrected_bc_stats_tsv_filename: str,
+    max_hamming_dist: int = 1,
+    min_frac_bcs_to_find: float = min_frac_bcs_to_find_default,
+):
+    """
+    Read ISSAAC-seq artifical BC FASTQ file with 30 bp HyDrop RNA barcode and
+    10 bp UMI, correct HyDrop RNA barcode and write corrected HyDrop RNA
+    barcode and UMI to output BC FASTQ file.
+
+    Parameters
+    ----------
+    hydrop_rna_bc_whitelist:
+        HyDrop RNA barcode whitelist.
+    fastq_with_raw_bc_filename:
+        Input FASTQ file with raw barcode reads, made from:
+          - 30 bp HyDrop RNA barcode (original index 2 read)
+          - 10 bp UMI (from bp 1 of original R2 read)
+    fastq_with_corrected_bc_filename:
+        Output FASTQ file with corrected (if possible) HyDrop RNA barcode and UMI.
+    corrected_bc_stats_tsv_filename:
+        File with barcode correction statistics.
+    max_hamming_dist:
+        Maximum hamming distance allowed for the barcode to consider it a match with
+        the whitelist. Default: 1.
+    min_frac_bcs_to_find:
+        Required minimum fraction of barcode reads that need to contain a barcode.
+        Default: 0.5.
+
+    Returns
+    -------
+    enough_bcs_found, frac_bcs_found
+
+    """
+    if max_hamming_dist > 3 or max_hamming_dist < 0:
+        raise ValueError("Only hamming distances 0, 1, 2 and 3 are supported.")
+
+    # Store number of reads in FASTQ file.
+    total_reads = 0
+
+    # Store number of reads which have a HyDrop RNA barcode with a hamming distance of
+    # 0, 1, 2 or 3 to the HyDrop RNA barcodes whitelist.
+    hydrop_rna_bc_mismatches_stats = [0 , 0, 0, 0]
+
+    if fastq_with_corrected_bc_filename == "-":
+        fastq_with_corrected_bc_filename = "/dev/stdout"
+
+    with open(fastq_with_corrected_bc_filename, "w") as corrected_bc_fh:
+        for record in bio.FASTQ(fastq_with_raw_bc_filename, gzip=True, validate=False, copy=True):
+            total_reads += 1
+
+            # Extract HyDrop RNA barcode sequence and quality.
+            (hydrop_rna_bc_seq,
+             hydrop_rna_bc_qual
+             ) = get_seq_and_qual_barcode_read(
+                fastq_record=record,
+                seq_start=0,
+                seq_end=30,
+                auto_reverse_comp=True,  # Reverse complement if needed based on the
+                                         # sequencer (comes from index read 2).
+            )
+
+            # Extract UMI sequence and quality.
+            (umi_seq,
+             umi_qual
+             ) = get_seq_and_qual_barcode_read(
+                fastq_record=record,
+                seq_start=30,
+                seq_end=40,
+                auto_reverse_comp=False,  # Never reverse complement.
+            )
+
+            corrected_hydrop_rna_bc = correct_bc_by_qual_order_with_whitelist_or_correct_bc_with_Ns_with_whitelist(
+                bc_whitelist=hydrop_rna_bc_whitelist,
+                bc_length=30,
+                bc_seq=hydrop_rna_bc_seq,
+                bc_qual=hydrop_rna_bc_qual,
+                max_hamming_dist=max_hamming_dist,
+            )
+
+            if corrected_hydrop_rna_bc:
+                hydrop_rna_bc_mismatches_stats[corrected_hydrop_rna_bc.hamming_dist] += 1
+
+                # Write original FASTQ record name, corrected HyDrop RNA barcode and UMI.
+                corrected_bc_fh.write(
+                    f"@{record.name}\n" +
+                    f"{corrected_hydrop_rna_bc.corrected_bc}{umi_seq}\n" +
+                    f"+\n"
+                    f"{hydrop_rna_bc_qual}{umi_qual}\n"
+                )
+            else:
+                # Write original FASTQ record name, uncorrected HyDrop RNA barcode and UMI.
+                corrected_bc_fh.write(
+                    f"@{record.name}\n" +
+                    f"{hydrop_rna_bc_seq}{umi_seq}\n" +
+                    f"+\n"
+                    f"{hydrop_rna_bc_qual}{umi_qual}\n"
+                )
+
+    # Calculate number of total HyDrop RNA barcodes found.
+    hydrop_rna_bc_reads = sum(hydrop_rna_bc_mismatches_stats)
+
+    reads_without_hydrop_rna_bc = total_reads - hydrop_rna_bc_reads
+
+    with open(corrected_bc_stats_tsv_filename, 'w') as corrected_bc_stats_tsv_fh:
+        corrected_bc_stats_tsv_fh.write(
+            f"reads\t{total_reads}\t100.00%\n" +
+            f"hydrop_rna_bc_reads\t{hydrop_rna_bc_reads}\t" +
+            f"{(hydrop_rna_bc_reads / total_reads * 100.0)}%\n" +
+            f"reads_without_hydrop_rna_bc\t{reads_without_hydrop_rna_bc}\t"
+            f"{(reads_without_hydrop_rna_bc / total_reads * 100.0)}%\n"
+        )
+
+        for i in range(0, max_hamming_dist + 1):
+            corrected_bc_stats_tsv_fh.write(
+                f"hydrop_rna_bc_reads_with_{i}_mismatches\t" +
+                f"{hydrop_rna_bc_mismatches_stats[i]}\t"
+                f"{(hydrop_rna_bc_mismatches_stats[i] / total_reads * 100.0)}%\n"
+            )
+
+    # Calculate fraction of reads which have a HyDrop RNA barcode.
+    frac_bcs_found = hydrop_rna_bc_reads / total_reads
+
+    # Are there enough reads that have a HyDrop RNA barcode.
+    enough_bcs_found = (frac_bcs_found >= min_frac_bcs_to_find)
+
+    return enough_bcs_found, frac_bcs_found
+
+
+def main():
+    if len(sys.argv) < 6:
+        print(
+            f"Usage: seqc run -release {sys.argv[0]} " +
+            "hydrop_rna_bc_whitelist_filename fastq_with_raw_bc_file fastq_with_corrected_bc_file " +
+            "corrected_bc_stats_file max_mismatches [min_frac_bcs_to_find]",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    else:
+        hydrop_rna_bc_whitelist_filename = sys.argv[1]
+        fastq_with_raw_bc_filename = sys.argv[2]
+        fastq_with_corrected_bc_filename = sys.argv[3]
+        corrected_bc_stats_tsv_filename = sys.argv[4]
+        max_mismatches = int(sys.argv[5])
+        min_frac_bcs_to_find = float(sys.argv[6]) if len(sys.argv) == 7 else min_frac_bcs_to_find_default
+
+        # Read HyDrop RNA whitelisted barcodes from file and convert to a set of Kmers.
+        hydrop_rna_bc_whitelist = read_barcode_whitelist_from_file(
+            bc_whitelist_filename=hydrop_rna_bc_whitelist_filename,
+            bc_length=30,
+            bc_column_idx=0,
+            warning=True,
+        )
+
+        # Read FASTQ with barcodes and write a FASTQ with corrected barcodes for barcodes
+        # that match the whitelist closely enough, else write the original barcodes.
+        enough_bcs_found, frac_bcs_found = correct_issaac_seq_barcode_from_fastq(
+            hydrop_rna_bc_whitelist=hydrop_rna_bc_whitelist,
+            fastq_with_raw_bc_filename=fastq_with_raw_bc_filename,
+            fastq_with_corrected_bc_filename=fastq_with_corrected_bc_filename,
+            corrected_bc_stats_tsv_filename=corrected_bc_stats_tsv_filename,
+            max_hamming_dist=max_mismatches,
+            min_frac_bcs_to_find=min_frac_bcs_to_find,
+        )
+
+        if not enough_bcs_found:
+            print(
+                f"Warning: Only {frac_bcs_found * 100.00}% of the reads have a barcode.",
+                "         Check if you provided the correct barcode whitelist file.\n",
+                sep="\n",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
