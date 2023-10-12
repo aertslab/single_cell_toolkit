@@ -312,6 +312,7 @@ def fragments_to_bw(
     chrom_sizes: dict[str, int],
     bw_filename: str,
     normalize: bool = True,
+    scaling_factor: float = 1.0,
 ):
     chrom_arrays = {}
 
@@ -322,8 +323,7 @@ def fragments_to_bw(
         for chrom, chrom_size in chrom_sizes.items():
             chrom_arrays[chrom] = np.zeros(chrom_size, dtype=np.uint32)
 
-        # Calculate RPM scaling factor.
-        rpm_scaling_factor = fragments_df.height / 1_000_000.0
+        no_fragments = 0
 
         print(f"Number of fragments: {fragments_df.height}")
         print("Split fragments df by chromosome")
@@ -332,10 +332,17 @@ def fragments_to_bw(
         print("Calculate depth per chromosome:")
         for chrom in per_chrom_fragments_dfs:
             print(f"  - {chrom} ...")
+            if chrom not in chrom_sizes:
+                print(f"    Skipping {chrom} as it is not in chrom sizes file.")
+                continue
             starts, ends = (
                 per_chrom_fragments_dfs[chrom].select(["Start", "End"]).to_numpy().T
             )
             chrom_arrays[chrom] = calculate_depth(chrom_sizes[chrom], starts, ends)
+            no_fragments += per_chrom_fragments_dfs[chrom].height
+
+        # Calculate RPM scaling factor.
+        rpm_scaling_factor = no_fragments / 1_000_000.0
 
         print(
             "Compact depth array per chromosome (make ranges for consecutive the same values and remove zeros):"
@@ -357,7 +364,9 @@ def fragments_to_bw(
             values = values[non_zero_idx]
 
             if normalize:
-                values /= rpm_scaling_factor
+                values = values / rpm_scaling_factor * scaling_factor
+            elif scaling_factor != 1.0:
+                values *= scaling_factor
 
             print(f"  - Write {chrom} to bigWig ...")
             bw.addEntries(chroms=chroms, starts=starts, ends=ends, values=values)
@@ -410,13 +419,24 @@ def main():
         help='Normalize genome coverage data. Default: "yes".',
     )
 
+    parser.add_argument(
+        "-s",
+        "--scaling",
+        dest="scaling_factor",
+        action="store",
+        type=float,
+        required=False,
+        default=1.0,
+        help='Scaling factor for genome coverage data. Default: "1.0".',
+    )
+
     args = parser.parse_args()
 
     chrom_sizes = get_chromosome_sizes(args.chrom_sizes_filename)
     fragments_df = read_fragments_to_polars_df(args.fragments_filename)
 
     fragments_to_bw(
-        fragments_df, chrom_sizes, args.bigwig_filename, args.normalize == "yes"
+        fragments_df, chrom_sizes, args.bigwig_filename, args.normalize == "yes", args.scaling_factor
     )
 
 
