@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2022 - Gert Hulselmans
+# Copyright (C) 2022-2023 - Gert Hulselmans
 
 
 from __future__ import annotations
