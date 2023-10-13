@@ -17,7 +17,6 @@ def calculate_jaccard_index_cbs(
     min_frags_per_CB: int = 1000,
     chromosomes: str | Sequence | None = None,
 ) -> None:
-
     print(f'Reading fragments file "{fragments_tsv_filename}" ...')
 
     # Read fragments file, count number of fragments per CB and
@@ -172,12 +171,12 @@ def calculate_jaccard_index_cbs(
         .sort(
             # Sort on Jaccard index value.
             by=["jaccard"],
-            reverse=True,
+            descending=True,
         )
         .with_columns(
             # Include rank based on Jaccard index value.
             pl.col("jaccard")
-            .rank(method="ordinal", reverse=True)
+            .rank(method="ordinal", descending=True)
             .alias("jaccard_rank")
         )
         .collect()

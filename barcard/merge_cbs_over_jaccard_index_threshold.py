@@ -15,7 +15,6 @@ def merge_cbs_over_jaccard_index_threshold(
     input_fragments_tsv_filename: str,
     output_fragments_tsv_filename: str,
 ) -> None:
-
     # Read CB1 vs CB2 Jaccard CSV file filtered by Otsu threshold.
     CB1_vs_CB2_jaccard_filtered_df = pl.read_csv(
         CB1_vs_CB2_jaccard_filtered_tsv_filename,
@@ -58,10 +57,10 @@ def merge_cbs_over_jaccard_index_threshold(
                 # independend of the order of the CBs) and convert
                 # to string where merged CBs are separated by "_".
                 pl.col("CB2")
-                .arr.concat([pl.col("CB1")])
-                .arr.unique()
-                .arr.sort()
-                .arr.join("_")
+                .list.concat([pl.col("CB1")])
+                .list.unique()
+                .list.sort()
+                .list.join("_")
                 .alias("merged_CBs"),
             ]
         )
