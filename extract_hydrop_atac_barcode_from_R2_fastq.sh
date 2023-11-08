@@ -38,14 +38,14 @@ extract_hydrop_atac_barcode_from_R2_fastq () {
         printf '    extract_hydrop_atac_barcode_from_R2_fastq \\\n';
         printf '        fastq_R2 \\\n';
         printf '        fastq_R2_BCONLY \\\n';
-        printf '        <hydrop_atac_barcode_design [3x96_5L|v2|2x384_10L|v1|3x96_10L|v0]> \\\n';
+        printf '        <hydrop_atac_barcode_design [3x96_5L|v2|2x384_10L|v1|3x96_10L|v0|10X]> \\\n';
         printf '        <compress_fastq_cmd [bgzip|pigz|igzip|gzip|stdout|-|uncompressed]> \\\n\n';
         printf 'Purpose: Extract HyDrop ATAC barcodes from R2 fastq read and write a new FASTQ\n';
         printf '         file which contains only the barcode.\n\n';
         printf 'Parameters:\n';
         printf '  - fastq_R2:   FASTQ R2 filename with barcodes (uncompressed or gzipped).\n';
         printf '  - fastq_R2_BCONLY: Output FASTQ R2 filename with extracted HyDrop ATAC barcodes.\n';
-        printf '  - hydrop_atac_barcode_design: "3x96_5L" = "v2" (default) or "2x384_10L" = "v1" or "3x96_10L" = "v0".\n';
+        printf '  - hydrop_atac_barcode_design: "3x96_5L" = "v2" (default) or "2x384_10L" = "v1" or "3x96_10L" = "v0" or "10X".\n';
         printf '  - compress_fastq_cmd:\n';
         printf '      - Compression program to use for output FASTQ files:\n';
         printf "          - \"bgzip\":  '%s'\n" "${compress_fastq_bgzip_cmd}";
@@ -98,6 +98,13 @@ extract_hydrop_atac_barcode_from_R2_fastq () {
             local split2_end=25;
             local split3_start=31;
             local split3_end=40;
+            ;;
+        '10X')
+            # 10X ATAC BC.
+            hydrop_atac_barcode_design='10X';
+            hydrop_atac_barcode_splits=1;
+            local split1_start=1;
+            local split1_end=16;
             ;;
         *)
             printf 'Error: Unsupported HyDrop ATAC barcode design "%s".\n' "${hydrop_atac_barcode_design}";
@@ -156,8 +163,9 @@ extract_hydrop_atac_barcode_from_R2_fastq () {
             '
             BEGIN {
                 split1_length = split1_end - split1_start + 1;
-                split2_length = split2_end - split2_start + 1;
-
+                if (hydrop_atac_barcode_splits >= 2) {
+                    split2_length = split2_end - split2_start + 1;
+                }
                 if (hydrop_atac_barcode_splits == 3) {
                     split3_length = split3_end - split3_start + 1;
                 }
@@ -173,6 +181,9 @@ extract_hydrop_atac_barcode_from_R2_fastq () {
                     } else if (hydrop_atac_barcode_splits == 3) {
                         # Extract HyDrop ATAC barcode info from sequence or quality line for 3x96_5L or 3x96_10L design.
                         print substr($0, split1_start, split1_length) substr($0, split2_start, split2_length) substr($0, split3_start, split3_length);
+                    } else if (hydrop_atac_barcode_splits == 1) {
+                        # Extract 10X ATAC barcode info from sequence or quality line.
+                        print substr($0, split1_start, split1_length);
                     }
                 }
             }' \
