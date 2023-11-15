@@ -51,6 +51,9 @@ def is_index2_reverse_complemented(sequencing_machine_id: str) -> bool:
         if sequencing_machine_id[0:2] in {"NB", "NS", "MN"}:
             # NextSeq500, NextSeq500, MiniSeq (Standard reagent kit).
             return True
+        if sequencing_machine_id[0:2] in {"AV"}:
+            # Element Bio AVITI.
+            return True
     elif sequencing_machine_id_length == 9:
         if sequencing_machine_id[0:5] in {"HWI-M", "HWI-C", "HWI-D"}:
             # MiSeq, HiSeq1500 or HiSeq2500.
