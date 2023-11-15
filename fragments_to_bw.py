@@ -430,10 +430,24 @@ def main():
         help='Scaling factor for genome coverage data. Default: "1.0".',
     )
 
+    parser.add_argument(
+        "--chrom-prefix",
+        dest="chrom_prefix",
+        action="store",
+        type=str,
+        required=False,
+        help='Add chromosome prefix to each chromosome name found in the fragments file.',
+    )
+
     args = parser.parse_args()
 
     chrom_sizes = get_chromosome_sizes(args.chrom_sizes_filename)
     fragments_df = read_fragments_to_polars_df(args.fragments_filename)
+
+    if args.chrom_prefix:
+        fragments_df =fragments_df.with_columns(
+            (pl.lit(f"{args.chrom_prefix}_") + pl.col("Chromosome").cast(pl.Utf8)
+        ).cast(pl.Categorical).alias("Chromosome"))
 
     fragments_to_bw(
         fragments_df, chrom_sizes, args.bigwig_filename, args.normalize == "yes", args.scaling_factor
