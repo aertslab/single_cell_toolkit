@@ -108,7 +108,7 @@ def correct_issaac_seq_barcode_from_fastq(
                 corrected_bc_fh.write(
                     f"@{record.name}\n" +
                     f"{corrected_hydrop_rna_bc.corrected_bc}{umi_seq}\n" +
-                    f"+\n"
+                    f"+\n" +
                     f"{hydrop_rna_bc_qual}{umi_qual}\n"
                 )
             else:
@@ -153,7 +153,7 @@ def correct_issaac_seq_barcode_from_fastq(
                     corrected_bc_fh.write(
                         f"@{record.name}\n" +
                         f"{corrected_hydrop_rna_bc_seq_str}{umi_seq}\n" +
-                        f"+\n"
+                        f"+\n" +
                         f"{hydrop_rna_bc_qual}{umi_qual}\n"
                     )
                 else:
@@ -161,7 +161,7 @@ def correct_issaac_seq_barcode_from_fastq(
                     corrected_bc_fh.write(
                         f"@{record.name}\n" +
                         f"{hydrop_rna_bc_seq}{umi_seq}\n" +
-                        f"+\n"
+                        f"+\n" +
                         f"{hydrop_rna_bc_qual}{umi_qual}\n"
                     )
 
@@ -175,7 +175,7 @@ def correct_issaac_seq_barcode_from_fastq(
             f"reads\t{total_reads}\t100.00%\n" +
             f"hydrop_rna_bc_reads\t{hydrop_rna_bc_reads}\t" +
             f"{(hydrop_rna_bc_reads / total_reads * 100.0)}%\n" +
-            f"reads_without_hydrop_rna_bc\t{reads_without_hydrop_rna_bc}\t"
+            f"reads_without_hydrop_rna_bc\t{reads_without_hydrop_rna_bc}\t" +
             f"{(reads_without_hydrop_rna_bc / total_reads * 100.0)}%\n"
         )
 
@@ -191,7 +191,7 @@ def correct_issaac_seq_barcode_from_fastq(
         for i in range(0, max_hamming_dist_stats + 1):
             corrected_bc_stats_tsv_fh.write(
                 f"hydrop_rna_bc_reads_with_{i}_mismatches\t" +
-                f"{hydrop_rna_bc_mismatches_stats[i]}\t"
+                f"{hydrop_rna_bc_mismatches_stats[i]}\t" +
                 f"{(hydrop_rna_bc_mismatches_stats[i] / total_reads * 100.0)}%\n"
             )
 
