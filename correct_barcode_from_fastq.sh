@@ -90,7 +90,7 @@ correct_barcode_from_fastq () {
 
     local first_barcode='';
 
-    # Read first barcode from barcode whitelist file.
+    # Read first barcode line from barcode whitelist file.
     if [ "${bc_whitelist_filename%.gz}" == "${bc_whitelist_filename}" ] ; then
         # Uncompressed file.
         read -r first_barcode < "${bc_whitelist_filename}";
@@ -104,6 +104,9 @@ correct_barcode_from_fastq () {
         # Set pipefail.
         set -o pipefail
     fi
+
+    # Only get the first barcode of the first line in case there are multiple columns like in HyDrop barcode files.
+    first_barcode="${first_barcode%%$'\t'*}";
 
     # Get length of first barcode.
     local -i bc_length="${#first_barcode}";
@@ -127,12 +130,11 @@ correct_barcode_from_fastq () {
             "${bc_remapping_filename}" \
             "${fastq_with_raw_bc_filename}" \
             "/dev/stdout" \
-            "${corrected_bc_filename}.corrected_bc_stats.tsv" \
+            "${corrected_bc_filename%.zst}.corrected_bc_stats.tsv" \
             "${bc_suffix}" \
             "${max_mismatches}" \
             "${min_frac_bcs_to_find}" \
-      | pigz -p 4 \
-      > "${corrected_bc_filename}";
+      | zstd -6 -T4 -q -f -o "${corrected_bc_filename%.zst}.zst";
 }
 
 
