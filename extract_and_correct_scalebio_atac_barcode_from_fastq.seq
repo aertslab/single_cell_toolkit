@@ -3,6 +3,7 @@ import sys
 
 from bio.kmer import Kmer
 from seq_lib.barcode_correction import (
+    CorrectedBc,
     correct_bc_by_qual_order_with_whitelist_or_correct_bc_with_Ns_with_whitelist,
     read_barcode_whitelist_from_file
 )
@@ -324,32 +325,331 @@ def correct_tagmentation_and_10x_atac_bc_from_fastq(
     return enough_bcs_found, frac_bcs_found
 
 
+def correct_tagmentation_and_hydrop_atac_bc_from_fastq(
+    tagmentation_bc_whitelist: set[Kmer[8]],
+    hydrop_atac_full_bc_whitelist: set[Kmer[30]],
+    hydrop_atac_partial_bc_whitelists: list[set[Kmer[10]]],
+    fastq_with_raw_bc_filename: str,
+    corrected_bc_filename: str,
+    corrected_bc_stats_tsv_filename: str,
+    bc_suffix: str = "1",
+    max_hamming_dist: int = 1,
+    min_frac_bcs_to_find: float = min_frac_bcs_to_find_default,
+):
+    """
+    Read ScaleBio index 2 FASTQ file with read name, tagmentation and HyDrop ATAC
+    barcodes and get raw tagmentation and 10x ATAC barcode sequences and qualities
+    and corrected barcode sequences (if the barcode matches the whitelists (exactly
+    or with max max_hamming_dist mismatch)).
+
+    Parameters
+    ----------
+    tagmentation_bc_whitelist:
+        Tagmentation barcode whitelist.
+    hydrop_atac_bc_whitelist:
+        HyDrop ATAC barcode whitelist.
+    fastq_with_raw_bc_filename:
+        Input FASTQ file with raw barcode reads.
+    corrected_bc_filename:
+        Output file with read name and raw tagmentation and Hydrop ATAC barcode
+        sequences and qualities and corrected barcode sequences.
+    corrected_bc_stats_tsv_filename:
+        File with barcode correction statistics.
+    bc_suffix:
+        Barcode suffix to append to corrected barcode sequences. Default: "1".
+    max_hamming_dist:
+        Maximum hamming distance allowed for the barcode to consider it a match with
+        the whitelist. Default: 1.
+    min_frac_bcs_to_find:
+        Required minimum fraction of barcode reads that need to contain a barcode.
+        Default: 0.5.
+
+    Returns
+    -------
+    enough_bcs_found, frac_bcs_found
+
+    """
+    if max_hamming_dist > 3 or max_hamming_dist < 0:
+        raise ValueError("Only hamming distances 0, 1, 2 and 3 are supported.")
+
+    # Store number of reads in FASTQ file.
+    total_reads = 0
+
+    per_tagmentation_bc_mismatches_stats = {
+        str(tagmentation_bc): [0 , 0, 0, 0]
+        for tagmentation_bc in tagmentation_bc_whitelist
+    }
+
+    # Store per tagmentation barcode the number of reads which also have a 10x ATAC
+    # barcode and for which the 10x ATAC barcode has hamming distance of 0, 1, 2 or 3
+    # from the 10x ATAC barcodes whitelist.
+    per_tagmentation_bc_and_with_hydrop_atac_bc_mismatches_stats = {
+        str(tagmentation_bc): [0 , 0, 0, 0]
+        for tagmentation_bc in tagmentation_bc_whitelist
+    }
+
+    # Store number of reads which have a HyDrop ATAC barcode with a hamming distance of
+    # 0, 1, 2 or 3 to the HyDrop RNA barcodes whitelist.
+    # As there are 3 subbarcodes, 9 mismatches in the theoretical maximum when hamming
+    # distance of 3 is selected.
+    hydrop_atac_bc_mismatches_stats = [0 , 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+    if corrected_bc_filename == "-":
+        corrected_bc_filename = "/dev/stdout"
+
+    with open(corrected_bc_filename, "w") as corrected_bc_fh:
+        for record in bio.FASTQ(fastq_with_raw_bc_filename, gzip=True, validate=False, copy=True):
+            total_reads += 1
+
+            # Get tagmentation + HyDrop ATAC sequence and associated quality from FASTQ
+            # record, reverse complemented if needed based on the sequencer.
+            (tagmentation_and_hydrop_atac_bc_seq,
+             tagmentation_and_hydrop_atac_bc_qual
+             ) = get_seq_and_qual_barcode_read(
+                fastq_record=record,
+                seq_start=0,
+                seq_end=48,
+            )
+            print(f"extract {total_reads}")
+            # Extract tagmentation barcode sequence and quality.
+            tagmentation_bc_seq = tagmentation_and_hydrop_atac_bc_seq[0:8]
+            tagmentation_bc_qual = tagmentation_and_hydrop_atac_bc_qual[0:8]
+            print("extact hydrop")
+            # Extract HyDrop ATAC barcode sequence and quality.
+            hydrop_atac_bc_seq = bio.seq(str(tagmentation_and_hydrop_atac_bc_seq[8:18]) +  str(tagmentation_and_hydrop_atac_bc_seq[23:33]) + str(tagmentation_and_hydrop_atac_bc_seq[38:48]))
+            hydrop_atac_bc_qual = tagmentation_and_hydrop_atac_bc_qual[8:18] + tagmentation_and_hydrop_atac_bc_qual[23:33] + tagmentation_and_hydrop_atac_bc_qual[38:48]
+            print("correct tagment")
+            corrected_tagmentation_bc = correct_bc_by_qual_order_with_whitelist_or_correct_bc_with_Ns_with_whitelist(
+                bc_whitelist=tagmentation_bc_whitelist,
+                bc_length=8,
+                bc_seq=tagmentation_bc_seq,
+                bc_qual=tagmentation_bc_qual,
+                max_hamming_dist=max_hamming_dist,
+            )
+
+            print("correct hydrop 1")
+            corrected_hydrop_atac_bc = correct_bc_by_qual_order_with_whitelist_or_correct_bc_with_Ns_with_whitelist(
+                bc_whitelist=hydrop_atac_full_bc_whitelist,
+                bc_length=30,
+                bc_seq=hydrop_atac_bc_seq,
+                bc_qual=hydrop_atac_bc_qual,
+                max_hamming_dist=0,
+            )
+
+            if corrected_tagmentation_bc:
+                per_tagmentation_bc_mismatches_stats[corrected_tagmentation_bc.corrected_bc][
+                    corrected_tagmentation_bc.hamming_dist
+                ] += 1
+
+            if corrected_hydrop_atac_bc:
+                hydrop_atac_bc_mismatches_stats[corrected_hydrop_atac_bc.hamming_dist] += 1
+
+                corrected_hydrop_atac_bc_seq_str = corrected_hydrop_atac_bc.corrected_bc
+            else:
+                print("correct hydrop2")
+                # Get partial HyDrop ATAC barcode sequence and quality for BC1, BC2 and BC3.
+                hydrop_atac_partial_bcs_seq = [
+                    hydrop_atac_bc_seq[0:10],
+                    hydrop_atac_bc_seq[10:20],
+                    hydrop_atac_bc_seq[20:30],
+                ]
+                hydrop_atac_partial_bcs_qual = [
+                    hydrop_atac_bc_qual[0:10],
+                    hydrop_atac_bc_qual[10:20],
+                    hydrop_atac_bc_qual[20:30],
+                ]
+
+                correctable_hydrop_atac_bc = True
+                corrected_hydrop_atac_bc_seq_str = ""
+                corrected_hydrop_atac_bc_hamming_dist = 0
+
+                for hydrop_atac_partial_bc_whitelist, hydrop_atac_partial_bc_seq, hydrop_atac_partial_bc_qual in zip(
+                    hydrop_atac_partial_bc_whitelists, hydrop_atac_partial_bcs_seq, hydrop_atac_partial_bcs_qual
+                ):
+                    corrected_hydrop_atac_partial_bc = correct_bc_by_qual_order_with_whitelist_or_correct_bc_with_Ns_with_whitelist(
+                        bc_whitelist=hydrop_atac_partial_bc_whitelist,
+                        bc_length=10,
+                        bc_seq=hydrop_atac_partial_bc_seq,
+                        bc_qual=hydrop_atac_partial_bc_qual,
+                        max_hamming_dist=max_hamming_dist,
+                    )
+
+                    if not corrected_hydrop_atac_partial_bc:
+                        correctable_hydrop_atac_bc = False
+                        break
+                    else:
+                        corrected_hydrop_atac_bc_seq_str += corrected_hydrop_atac_partial_bc.corrected_bc
+                        corrected_hydrop_atac_bc_hamming_dist += corrected_hydrop_atac_partial_bc.hamming_dist
+
+                if correctable_hydrop_atac_bc:
+                    hydrop_atac_bc_mismatches_stats[corrected_hydrop_atac_bc_hamming_dist] += 1
+                    corrected_hydrop_atac_bc = CorrectedBc(
+                        corrected_hydrop_atac_bc_hamming_dist,
+                        corrected_hydrop_atac_bc_seq_str,
+                    )
+                else:
+                    corrected_hydrop_atac_bc = None
+                print("correction done")
+            if corrected_hydrop_atac_bc and corrected_tagmentation_bc:
+                print("both correct")
+                per_tagmentation_bc_and_with_hydrop_atac_bc_mismatches_stats[
+                    corrected_tagmentation_bc.corrected_bc
+                ][corrected_hydrop_atac_bc.hamming_dist] += 1
+
+                # Write original FASTQ record name and raw cell barcode, raw cell
+                # barcode quality and corrected cell barcode:
+                #   - multiple cell barcode sequence strings should be concatenated
+                #     with dashes.
+                #   - multiple cell barcode quality strings should be concatenated
+                #     with spaces.
+                corrected_bc_fh.write(
+                    f"@{record.name} " +
+                    f"CR:Z:{tagmentation_bc_seq}-{hydrop_atac_bc_seq}\t" +
+                    f"CY:Z:{tagmentation_bc_qual} {hydrop_atac_bc_qual}\t" +
+                    f"CB:Z:{corrected_tagmentation_bc.corrected_bc}" +
+                    f"-{corrected_hydrop_atac_bc.corrected_bc}" +
+                    f"{'-' + bc_suffix if bc_suffix else ''}\n"
+                )
+            else:
+                # Write original FASTQ record name and raw cell barcode and raw cell
+                # barcode quality:
+                #   - multiple cell barcode sequence strings should be concatenated
+                #     with dashes.
+                #   - multiple cell barcode quality strings should be concatenated
+                #     with spaces.
+                corrected_bc_fh.write(
+                    f"@{record.name} " +
+                    f"CR:Z:{tagmentation_bc_seq}-{hydrop_atac_bc_seq}\t" +
+                    f"CY:Z:{tagmentation_bc_qual} {hydrop_atac_bc_qual}\n"
+                )
+
+    # Calculate number of tagmentation barcodes found per tagmentation barcode.
+    per_tagmentation_bc_reads = {
+        tagmentation_bc: sum(per_tagmentation_bc_mismatches_stats[tagmentation_bc])
+        for tagmentation_bc in per_tagmentation_bc_mismatches_stats
+    }
+
+    # Calculate number of total tagmentation barcodes found.
+    tagmentation_bc_reads = sum(per_tagmentation_bc_reads.values())
+
+    # Calculate number of total HyDrop ATAC barcodes found.
+    hydrop_atac_bc_reads = sum(hydrop_atac_bc_mismatches_stats)
+
+    # Calculate number of HyDrop ATAC barcodes found per tagmentation barcode.
+    per_tagmentation_bc_and_with_hydrop_atac_bc_reads = {
+        tagmentation_bc: sum(per_tagmentation_bc_and_with_hydrop_atac_bc_mismatches_stats[tagmentation_bc])
+        for tagmentation_bc in per_tagmentation_bc_and_with_hydrop_atac_bc_mismatches_stats
+    }
+
+    # Calculate number of total HyDrop ATAC barcodes found which also have a tagmentation barcode.
+    tagmentation_bc_and_hydrop_atac_bc_reads = sum(per_tagmentation_bc_and_with_hydrop_atac_bc_reads.values())
+
+    reads_without_tagmentation_bc = total_reads - tagmentation_bc_reads
+    reads_without_hydrop_atac_bc = total_reads - hydrop_atac_bc_reads
+    reads_without_both_tagmentation_bc_and_hydrop_atac_bc = total_reads - tagmentation_bc_and_hydrop_atac_bc_reads
+
+    with open(corrected_bc_stats_tsv_filename, 'w') as corrected_bc_stats_tsv_fh:
+        corrected_bc_stats_tsv_fh.write(
+            f"reads\t{total_reads}\t100.00%\n" +
+            f"tagmentation_bc_reads\t{tagmentation_bc_reads}\t" +
+            f"{(tagmentation_bc_reads / total_reads * 100.0)}%\n" +
+            f"hydrop_atac_bc_reads\t{hydrop_atac_bc_reads}\t" +
+            f"{(hydrop_atac_bc_reads / total_reads * 100.0)}%\n" +
+            f"tagmentation_bc_and_hydrop_atac_bc_reads\t{tagmentation_bc_and_hydrop_atac_bc_reads}\t" +
+            f"{(tagmentation_bc_and_hydrop_atac_bc_reads / total_reads * 100.0)}%\n" +
+            f"reads_without_tagmentation_bc\t{reads_without_tagmentation_bc}\t" +
+            f"{(reads_without_tagmentation_bc / total_reads * 100.0)}%\n" +
+            f"reads_without_hydrop_atac_bc\t{reads_without_hydrop_atac_bc}\t" +
+            f"{(reads_without_hydrop_atac_bc / total_reads * 100.0)}%\n"
+        )
+
+        # Only print hamming distance mismatches stats as long as the remaining
+        # hamming distance mismatches stats are not all zero.
+        max_hamming_dist_stats = 9
+        for hydrop_atac_bc_mismatches_stats_x in hydrop_atac_bc_mismatches_stats[::-1]:
+            if hydrop_atac_bc_mismatches_stats_x == 0:
+                max_hamming_dist_stats -= 1
+            else:
+               break
+
+        for i in range(0, max_hamming_dist_stats + 1):
+            corrected_bc_stats_tsv_fh.write(
+                f"hydrop_atac_bc_reads_with_{i}_mismatches\t" +
+                f"{hydrop_atac_bc_mismatches_stats[i]}\t" +
+                f"{(hydrop_atac_bc_mismatches_stats[i] / total_reads * 100.0)}%\n"
+            )
+
+        corrected_bc_stats_tsv_fh.write(
+            f"reads_without_both_tagmentation_bc_and_hydrop_atac_bc\t" +
+            f"{reads_without_both_tagmentation_bc_and_hydrop_atac_bc}\t" +
+            f"{(reads_without_both_tagmentation_bc_and_hydrop_atac_bc / total_reads * 100.0)}%\n"
+        )
+
+        corrected_bc_stats_tsv_fh.write(
+            f"\ntagmentation_bc\treads_with_tagmentation_bc\treads_with_tagmentation_bc_and_hydrop_atac_bc"
+        )
+
+        for i in range(0, max_hamming_dist + 1):
+            corrected_bc_stats_tsv_fh.write(
+                f"\ttagmentation_bc_with_{i}_mismatches"
+            )
+
+        for i in range(0, max_hamming_dist + 1):
+            corrected_bc_stats_tsv_fh.write(
+                f"\thydrop_atac_bc_with_{i}_mismatches"
+            )
+
+        corrected_bc_stats_tsv_fh.write("\n")
+
+        for tagmentation_bc in sorted(per_tagmentation_bc_reads.keys()):
+            corrected_bc_stats_tsv_fh.write(
+                f"{tagmentation_bc}\t" +
+                f"{per_tagmentation_bc_reads[tagmentation_bc]}\t" +
+                f"{per_tagmentation_bc_and_with_hydrop_atac_bc_reads[tagmentation_bc]}"
+            )
+
+            for i in range(0, max_hamming_dist + 1):
+                corrected_bc_stats_tsv_fh.write(
+                    f"\t{per_tagmentation_bc_mismatches_stats[tagmentation_bc][i]}"
+                )
+
+            for i in range(0, max_hamming_dist + 1):
+                corrected_bc_stats_tsv_fh.write(
+                    f"\t{per_tagmentation_bc_and_with_hydrop_atac_bc_mismatches_stats[tagmentation_bc][i]}"
+                )
+
+            corrected_bc_stats_tsv_fh.write("\n")
+
+    # Calculate fraction of reads which have both a tagmentation barcode
+    # and a HyDrop ATAC barcode.
+    frac_bcs_found = tagmentation_bc_and_hydrop_atac_bc_reads / total_reads
+
+    # Are there enough reads that have both a tagmentation barcode
+    # and a HyDrop ATAC barcode.
+    enough_bcs_found = (frac_bcs_found >= min_frac_bcs_to_find)
+
+    return enough_bcs_found, frac_bcs_found
+
+
 def main():
-    if len(sys.argv) < 8:
+    if len(sys.argv) < 9:
         print(
             f"Usage: seqc run -release {sys.argv[0]} " +
-            "tenx_atac_bc_whitelist_filename fastq_with_raw_bc_file corrected_bc_file " +
+            "tenx_or_hydrop_atac_bc_whitelist_filename tenx_or_hydrop fastq_with_raw_bc_file corrected_bc_file " +
             "corrected_bc_stats_file scalebio_bc_type bc_suffix max_mismatches [min_frac_bcs_to_find]",
             file=sys.stderr,
         )
         sys.exit(1)
     else:
-        tenx_atac_bc_whitelist_filename = sys.argv[1]
-        fastq_with_raw_bc_filename = sys.argv[2]
-        corrected_bc_filename = sys.argv[3]
-        corrected_bc_stats_tsv_filename = sys.argv[4]
-        scalebio_bc_type = sys.argv[5].lower()
-        bc_suffix = sys.argv[6]
-        max_mismatches = int(sys.argv[7])
-        min_frac_bcs_to_find = float(sys.argv[8]) if len(sys.argv) == 9 else min_frac_bcs_to_find_default
-
-        # Read 10x ATAC whitelisted barcodes from file and convert to a set of Kmers.
-        tenx_atac_bc_whitelist = read_barcode_whitelist_from_file(
-            bc_whitelist_filename=tenx_atac_bc_whitelist_filename,
-            bc_length=16,
-            bc_column_idx=0,
-            warning=True,
-        )
+        tenx_or_hydrop_atac_bc_whitelist_filename = sys.argv[1]
+        tenx_or_hydrop = sys.argv[2]
+        fastq_with_raw_bc_filename = sys.argv[3]
+        corrected_bc_filename = sys.argv[4]
+        corrected_bc_stats_tsv_filename = sys.argv[5]
+        scalebio_bc_type = sys.argv[6].lower()
+        bc_suffix = sys.argv[7]
+        max_mismatches = int(sys.argv[8])
+        min_frac_bcs_to_find = float(sys.argv[9]) if len(sys.argv) == 10 else min_frac_bcs_to_find_default
 
         tagmentation_bc_whitelist: set[Kmer[8]]
 
@@ -375,18 +675,69 @@ def main():
             )
             sys.exit(1)
 
-        # Read FASTQ with barcodes and write a FASTQ with corrected barcodes for barcodes
-        # that match the whitelist closely enough, else write the original barcodes.
-        enough_bcs_found, frac_bcs_found = correct_tagmentation_and_10x_atac_bc_from_fastq(
-            tagmentation_bc_whitelist=tagmentation_bc_whitelist,
-            tenx_atac_bc_whitelist=tenx_atac_bc_whitelist,
-            fastq_with_raw_bc_filename=fastq_with_raw_bc_filename,
-            corrected_bc_filename=corrected_bc_filename,
-            corrected_bc_stats_tsv_filename=corrected_bc_stats_tsv_filename,
-            bc_suffix=bc_suffix,
-            max_hamming_dist=max_mismatches,
-            min_frac_bcs_to_find=min_frac_bcs_to_find,
-        )
+        enough_bcs_found = False
+        frac_bcs_found = 0.0
+
+        if tenx_or_hydrop == "10x":
+            # Read 10x ATAC whitelisted barcodes from file and convert to a set of Kmers.
+            tenx_atac_bc_whitelist = read_barcode_whitelist_from_file(
+                bc_whitelist_filename=tenx_or_hydrop_atac_bc_whitelist_filename,
+                bc_length=16,
+                bc_column_idx=0,
+                warning=True,
+            )
+
+            # Read FASTQ with barcodes and write a FASTQ with corrected barcodes for barcodes
+            # that match the whitelist closely enough, else write the original barcodes.
+            enough_bcs_found, frac_bcs_found = correct_tagmentation_and_10x_atac_bc_from_fastq(
+                tagmentation_bc_whitelist=tagmentation_bc_whitelist,
+                tenx_atac_bc_whitelist=tenx_atac_bc_whitelist,
+                fastq_with_raw_bc_filename=fastq_with_raw_bc_filename,
+                corrected_bc_filename=corrected_bc_filename,
+                corrected_bc_stats_tsv_filename=corrected_bc_stats_tsv_filename,
+                bc_suffix=bc_suffix,
+                max_hamming_dist=max_mismatches,
+                min_frac_bcs_to_find=min_frac_bcs_to_find,
+            )
+        elif tenx_or_hydrop == "hydrop":
+            # Read HyDrop ATAC whitelisted barcodes from file and convert to a set of Kmers.
+            hydrop_atac_full_bc_whitelist = read_barcode_whitelist_from_file(
+                bc_whitelist_filename=tenx_or_hydrop_atac_bc_whitelist_filename,
+                bc_length=30,
+                bc_column_idx=0,
+                warning=True,
+            )
+
+            # Read per partial HyDrop ATAC whitelisted barcodes from file and convert to a set of Kmers.
+            hydrop_atac_partial_bc_whitelists = []
+            for i in [1, 2, 3]:
+                hydrop_atac_partial_bc_whitelists.append(
+                    read_barcode_whitelist_from_file(
+                        bc_whitelist_filename=tenx_or_hydrop_atac_bc_whitelist_filename,
+                        bc_length=10,
+                        bc_column_idx=i,
+                        warning=True,
+                    )
+                )
+
+            # Read FASTQ with barcodes and write a FASTQ with corrected barcodes for barcodes
+            # that match the whitelist closely enough, else write the original barcodes.
+            enough_bcs_found, frac_bcs_found = correct_tagmentation_and_hydrop_atac_bc_from_fastq(
+                tagmentation_bc_whitelist=tagmentation_bc_whitelist,
+                hydrop_atac_full_bc_whitelist=hydrop_atac_full_bc_whitelist,
+                hydrop_atac_partial_bc_whitelists=hydrop_atac_partial_bc_whitelists,
+                fastq_with_raw_bc_filename=fastq_with_raw_bc_filename,
+                corrected_bc_filename=corrected_bc_filename,
+                corrected_bc_stats_tsv_filename=corrected_bc_stats_tsv_filename,
+                max_hamming_dist=max_mismatches,
+                min_frac_bcs_to_find=min_frac_bcs_to_find,
+            )
+        else:
+            print(
+                f"Error: A barcode whitelist filename (10X ATAC or HyDrop ATAC) is required.\n",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
         if not enough_bcs_found:
             print(
