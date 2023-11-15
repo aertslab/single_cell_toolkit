@@ -40,7 +40,16 @@ def read_barcode_whitelist_from_file(
             # Skip empty lines and lines that start with a comment.
             continue
 
-        bc_str = bc_line.split('\t')[bc_column_idx]
+        columns = bc_line.split("\t")
+
+        if len(columns) <= bc_column_idx:
+            print(
+                f"Error: Barcode file does not have column {bc_column_idx + 1}",
+                file=sys.stderr
+            )
+            continue
+
+        bc_str = columns[bc_column_idx]
         bc_length_current_line = len(bc_str)
 
         if bc_length_current_line == 0 or bc_str[0] == "#":
@@ -57,7 +66,7 @@ def read_barcode_whitelist_from_file(
                 )
             continue
 
-        if 'N' in bc_str:
+        if "N" in bc_str:
             # Skip barcodes if they have an N.
             if warning:
                 print(
@@ -106,7 +115,15 @@ def read_barcode_whitelist_from_file_as_list(
             # Skip empty lines and lines that start with a comment.
             continue
 
-        bc_str = bc_line.split('\t')[bc_column_idx]
+        columns = bc_line.split("\t")
+
+        if len(columns) <= bc_column_idx:
+            print(
+                f"Error: Barcode file does not have column {bc_column_idx + 1}",
+                file=sys.stderr
+            )
+
+        bc_str = columns[bc_column_idx]
         bc_length_current_line = len(bc_str)
 
         if bc_length_current_line == 0 or bc_str[0] == "#":
@@ -124,7 +141,7 @@ def read_barcode_whitelist_from_file_as_list(
                     )
                 continue
 
-        if 'N' in bc_str:
+        if "N" in bc_str:
             # Skip barcodes if they have an N.
             if warning:
                 print(
@@ -471,7 +488,7 @@ def correct_bc_with_Ns_with_whitelist(
     n_positions = List[int](capacity=len(bc_with_Ns))
 
     for idx, nuc in enumerate(bc_with_Ns):
-        if nuc == 'N':
+        if nuc == "N":
             n_count += 1
             n_positions.append(idx)
 
