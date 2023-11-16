@@ -194,6 +194,10 @@ add_corrected_barcode_to_read_name () {
                         read_name_R2 = substr(fastq_R2_line, 2);
                     }
 
+                    # Remove CB and UMI from end of read name, if it is there.
+                    sub(/:[ACGTN+]+$/, "", read_name_R1);
+                    sub(/:[ACGTN+]+$/, "", read_name_R2);
+
                     # Check if read names match between both FASTQ files.
                     if ( read_name_R1 != read_name_R2 ) {
                         print "Error: Read name R1 (\"" read_name_R1 "\") and read name R2 (\"" read_name_R2 "\") are not paired properly (line number: " fastq_line_number ").";
@@ -225,6 +229,9 @@ add_corrected_barcode_to_read_name () {
                                 read_name_corrected_bc = substr(corrected_bc_line, 2);
                                 corrected_bc_sam_tags = "";
                             }
+
+                            # Remove CB and UMI from end of read name, if it is there.
+                            sub(/:[ACGTN+]+$/, "", read_name_corrected_bc);
                         }
                     }
                 } else if ( fastq_part == 2 ) {
