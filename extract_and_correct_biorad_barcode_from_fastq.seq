@@ -493,7 +493,7 @@ class Barcodes:
     bc3: seq
 
 
-def extract_and_correct_biorad_barcode_in_fastq(fastq_with_raw_bc_filename: str, fastq_with_corrected_bc_filename: str, corrected_bc_stats_tsv_filename: str):
+def extract_and_correct_biorad_barcode_from_fastq(fastq_with_raw_bc_filename: str, fastq_with_corrected_bc_filename: str, corrected_bc_stats_tsv_filename: str):
     """
     Read FASTQ file with barcodes and append " CB:Z:corrected_barcode" to the FASTQ record comment
     if the barcode matches the whitelist (exact match or 1 mismatch).
@@ -618,4 +618,4 @@ else:
 
     # Read FASTQ with barcodes and write a FASTQ with corrected barcodes for barcodes that
     # match the whitelist of barcodes closely enough, else write the original barcodes.
-    extract_and_correct_biorad_barcode_in_fastq(fastq_with_raw_bc_filename, fastq_with_corrected_bc_filename, corrected_bc_stats_tsv_filename)
+    extract_and_correct_biorad_barcode_from_fastq(fastq_with_raw_bc_filename, fastq_with_corrected_bc_filename, corrected_bc_stats_tsv_filename)

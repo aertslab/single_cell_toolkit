@@ -28,7 +28,7 @@ compress_fastq_gzip_cmd="gzip -${compress_fastq_level} -c";
 
 
 
-extract_and_correct_biorad_barcode_in_fastq () {
+extract_and_correct_biorad_barcode_from_fastq () {
     local fastq_R1_filename="${1}";
     local fastq_R2_filename="${2}";
     local fastq_output_prefix="${3}";
@@ -37,7 +37,7 @@ extract_and_correct_biorad_barcode_in_fastq () {
 
     if [ ${#@} -lt 3 ] ; then
         printf '\nUsage:\n';
-        printf '    extract_and_correct_biorad_barcode_in_fastq \\\n';
+        printf '    extract_and_correct_biorad_barcode_from_fastq \\\n';
         printf '        fastq_R1 \\\n';
         printf '        fastq_R2 \\\n';
         printf '        fastq_output_prefix \\\n';
@@ -145,7 +145,7 @@ extract_and_correct_biorad_barcode_in_fastq () {
     # Pipe the new R1 FASTQ into mawk, fix read name comments in R2 reads and
     # write both fixed FASTQ files.
     seqc run --release \
-        "${script_dir}/extract_and_correct_biorad_barcode_in_fastq.seq" \
+        "${script_dir}/extract_and_correct_biorad_barcode_from_fastq.seq" \
             "${fastq_R1_filename}" \
             '/dev/stdout' \
             "${corrected_bc_stats_tsv_filename}" \
@@ -228,4 +228,4 @@ extract_and_correct_biorad_barcode_in_fastq () {
 
 
 
-extract_and_correct_biorad_barcode_in_fastq "${@}";
+extract_and_correct_biorad_barcode_from_fastq "${@}";
