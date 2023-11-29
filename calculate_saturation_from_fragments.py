@@ -103,6 +103,7 @@ def MM(x, Vmax, Km):
 # sub-sampling function
 def sub_sample_fragments(
     fragments_df,
+    n_reads,
     cbs=None,
     min_uniq_frag=200,
     sampling_fractions=sampling_fractions_default,
@@ -118,6 +119,7 @@ def sub_sample_fragments(
             "mean_frag_per_bc": np.zeros(sampling_fractions_length, np.float64),
             "median_uniq_frag_per_bc": np.zeros(sampling_fractions_length, np.float64),
             "cell_barcode_count": np.zeros(sampling_fractions_length, np.uint32),
+            "total_reads": np.fill(sampling_fractions_length, n_reads, np.uint32),
         },
         index=pd.Index(data=np.array(sampling_fractions), name="sampling_fraction"),
     )
@@ -297,6 +299,15 @@ def sub_sample_fragments(
         # Delete dataframe to free memory.
         del fragments_sampled_for_selected_cb_df
 
+    logger.info("Add extra statistics.")
+    stats_df["mean_reads_per_barcode"] = (
+        stats_df["total_reads"] / stats_df["cell_barcode_count"]
+    ).fillna(0)
+    stats_df["duplication_rate"] = (
+        stats_df["total_frag_count"] - stats_df["total_unique_frag_count"]
+    ) / stats_df["total_frag_count"]
+    stats_df["duplication_rate"] = stats_df["duplication_rate"].fillna(0)
+
     logger.info(f'Saving statistics in "{stats_tsv_filename}".')
     stats_df.to_csv(stats_tsv_filename, sep="\t")
 
@@ -415,6 +426,15 @@ def main():
             " file with summary of reads and additional reads needed to reach"
             " saturation specified by percentages."
         ),
+    )
+    parser.add_argument(
+        "-n",
+        "--raw-reads",
+        dest="n_reads",
+        action="store",
+        type=str,
+        required=True,
+        help="Number of raw sequenced reads for this fragments file.",
     )
     parser.add_argument(
         "-c",
