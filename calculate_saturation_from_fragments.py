@@ -40,12 +40,14 @@ sampling_fractions_default = [
 def read_bc_and_counts_from_fragments_file(fragments_bed_filename: str) -> pl.DataFrame:
     """
     Read cell barcode (column 4) and counts per fragment (column 5) from fragments BED file.
+
     Cell barcodes will appear more than once as they have counts per fragment, but as
     the fragment locations are not needed, they are not returned.
 
     Parameters
     ----------
-    fragments_bed_filename: Fragments BED filename.
+    fragments_bed_filename
+        Fragments BED filename.
 
     Returns
     -------
