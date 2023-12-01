@@ -121,7 +121,7 @@ def sub_sample_fragments(
             "mean_frag_per_bc": np.zeros(sampling_fractions_length, np.float64),
             "median_uniq_frag_per_bc": np.zeros(sampling_fractions_length, np.float64),
             "cell_barcode_count": np.zeros(sampling_fractions_length, np.uint32),
-            "total_reads": np.fill(sampling_fractions_length, n_reads, np.uint32),
+            "total_reads": np.full(sampling_fractions_length, n_reads, np.uint32),
         },
         index=pd.Index(data=np.array(sampling_fractions), name="sampling_fraction"),
     )
@@ -141,7 +141,7 @@ def sub_sample_fragments(
         # Get all cell barcodes which have more than min_uniq_frag fragments from the
         # fragments file.
         selected_cbs_df = (
-            fragments_df.groupby("CellBarcode")
+            fragments_df.group_by("CellBarcode")
             .agg(pl.col("FragmentCount").count().alias("nbr_frags_per_CBs"))
             .filter(pl.col("nbr_frags_per_CBs") > min_uniq_frag)
         )
@@ -174,7 +174,7 @@ def sub_sample_fragments(
         logger.info("Calculate total unique number of fragments.")
 
         stats_df.loc[1.0, "total_unique_frag_count"] = (
-            fragments_for_selected_bcs_df.groupby(
+            fragments_for_selected_bcs_df.group_by(
                 ["CellBarcode", "Chromosome", "Start", "End"]
             )
             .agg([pl.first("Start").alias("Start_tmp")])
@@ -187,7 +187,7 @@ def sub_sample_fragments(
             "unique fragments per cell barcode."
         )
         stats_df_pl = (
-            fragments_for_selected_bcs_df.groupby("CellBarcode")
+            fragments_for_selected_bcs_df.group_by("CellBarcode")
             .agg(
                 [
                     pl.col("FragmentCount").sum().alias("MeanFragmentsPerCB"),
@@ -230,7 +230,7 @@ def sub_sample_fragments(
         elif sampling_fraction == 1.0:
             # Statistics for 100% sampling are already calculated as there is no need
             # to have the fragments_all_df dataframe as no sampling is needed.
-            # This avoids the need to use the expensive groupby operations for the
+            # This avoids the need to use the expensive group_by operations for the
             # calculations of the median number of unique fragments per barcode.
             continue
 
@@ -258,7 +258,7 @@ def sub_sample_fragments(
 
         logger.info("Calculate total unique number of fragments.")
         stats_df.loc[sampling_fraction, "total_unique_frag_count"] = (
-            fragments_sampled_for_selected_cb_df.groupby(
+            fragments_sampled_for_selected_cb_df.group_by(
                 ["CellBarcode", "Chromosome", "Start", "End"]
             )
             .agg([pl.first("Start").alias("Start_tmp")])
@@ -271,7 +271,7 @@ def sub_sample_fragments(
             fragments_sampled_for_selected_cb_df.select(
                 [pl.col("CellBarcode"), pl.col("FragmentCount")]
             )
-            .groupby("CellBarcode")
+            .group_by("CellBarcode")
             .agg([pl.count("FragmentCount").alias("FragmentsPerCB")])
             .select([pl.col("FragmentsPerCB").mean().alias("MeanFragmentsPerCB")])
             .item()
@@ -279,12 +279,12 @@ def sub_sample_fragments(
 
         logger.info("Calculate median number of unique fragments per cell barcode.")
         stats_df.loc[sampling_fraction, "median_uniq_frag_per_bc"] = (
-            fragments_sampled_for_selected_cb_df.groupby(
+            fragments_sampled_for_selected_cb_df.group_by(
                 ["CellBarcode", "Chromosome", "Start", "End"]
             )
             .agg([pl.col("FragmentCount").first().alias("FragmentCount")])
             .select([pl.col("CellBarcode"), pl.col("FragmentCount")])
-            .groupby("CellBarcode")
+            .group_by("CellBarcode")
             .agg(pl.col("FragmentCount").count().alias("UniqueFragmentsPerCB"))
             .select(pl.col("UniqueFragmentsPerCB").median())
             .item()
@@ -292,7 +292,7 @@ def sub_sample_fragments(
 
         logger.info("Calculate number of cell barcodes.")
         stats_df.loc[sampling_fraction, "cell_barcode_count"] = (
-            fragments_sampled_for_selected_cb_df.groupby(["CellBarcode"])
+            fragments_sampled_for_selected_cb_df.group_by(["CellBarcode"])
             .agg([pl.first("Start").alias("Start_tmp")])
             .select(pl.count())
             .item()
@@ -304,11 +304,15 @@ def sub_sample_fragments(
     logger.info("Add extra statistics.")
     stats_df["mean_reads_per_barcode"] = (
         stats_df["total_reads"] / stats_df["cell_barcode_count"]
-    ).fillna(0)
+    )
+
     stats_df["duplication_rate"] = (
         stats_df["total_frag_count"] - stats_df["total_unique_frag_count"]
     ) / stats_df["total_frag_count"]
-    stats_df["duplication_rate"] = stats_df["duplication_rate"].fillna(0)
+
+    if 0.0 in sampling_fractions:
+        stats_df.loc[0.0, "mean_reads_per_barcode"] = 0.0
+        stats_df.loc[0.0, "duplication_rate"] = 0.0
 
     logger.info(f'Saving statistics in "{stats_tsv_filename}".')
     stats_df.to_csv(stats_tsv_filename, sep="\t")
@@ -489,7 +493,7 @@ def main():
     percentages = [float(x) for x in args.percentages.split(",")]
 
     # Enable global string cache.
-    pl.enable_string_cache(True)
+    pl.enable_string_cache()
 
     # Load fragments BED file.
     logger.info("Loading fragments BED file started.")
