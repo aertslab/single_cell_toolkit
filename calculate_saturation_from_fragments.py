@@ -121,7 +121,7 @@ def sub_sample_fragments(
             "mean_frag_per_bc": np.zeros(sampling_fractions_length, np.float64),
             "median_uniq_frag_per_bc": np.zeros(sampling_fractions_length, np.float64),
             "cell_barcode_count": np.zeros(sampling_fractions_length, np.uint32),
-            "total_reads": np.full(sampling_fractions_length, n_reads, np.uint32),
+            "total_reads": np.array(sampling_fractions, np.float64) * n_reads,
         },
         index=pd.Index(data=np.array(sampling_fractions), name="sampling_fraction"),
     )
