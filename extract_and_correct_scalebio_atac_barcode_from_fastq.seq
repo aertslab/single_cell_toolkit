@@ -410,15 +410,15 @@ def correct_tagmentation_and_hydrop_atac_bc_from_fastq(
                 seq_start=0,
                 seq_end=48,
             )
-            print(f"extract {total_reads}")
+
             # Extract tagmentation barcode sequence and quality.
             tagmentation_bc_seq = tagmentation_and_hydrop_atac_bc_seq[0:8]
             tagmentation_bc_qual = tagmentation_and_hydrop_atac_bc_qual[0:8]
-            print("extact hydrop")
+
             # Extract HyDrop ATAC barcode sequence and quality.
             hydrop_atac_bc_seq = bio.seq(str(tagmentation_and_hydrop_atac_bc_seq[8:18]) +  str(tagmentation_and_hydrop_atac_bc_seq[23:33]) + str(tagmentation_and_hydrop_atac_bc_seq[38:48]))
             hydrop_atac_bc_qual = tagmentation_and_hydrop_atac_bc_qual[8:18] + tagmentation_and_hydrop_atac_bc_qual[23:33] + tagmentation_and_hydrop_atac_bc_qual[38:48]
-            print("correct tagment")
+
             corrected_tagmentation_bc = correct_bc_by_qual_order_with_whitelist_or_correct_bc_with_Ns_with_whitelist(
                 bc_whitelist=tagmentation_bc_whitelist,
                 bc_length=8,
@@ -427,7 +427,6 @@ def correct_tagmentation_and_hydrop_atac_bc_from_fastq(
                 max_hamming_dist=max_hamming_dist,
             )
 
-            print("correct hydrop 1")
             corrected_hydrop_atac_bc = correct_bc_by_qual_order_with_whitelist_or_correct_bc_with_Ns_with_whitelist(
                 bc_whitelist=hydrop_atac_full_bc_whitelist,
                 bc_length=30,
@@ -446,7 +445,6 @@ def correct_tagmentation_and_hydrop_atac_bc_from_fastq(
 
                 corrected_hydrop_atac_bc_seq_str = corrected_hydrop_atac_bc.corrected_bc
             else:
-                print("correct hydrop2")
                 # Get partial HyDrop ATAC barcode sequence and quality for BC1, BC2 and BC3.
                 hydrop_atac_partial_bcs_seq = [
                     hydrop_atac_bc_seq[0:10],
@@ -489,9 +487,8 @@ def correct_tagmentation_and_hydrop_atac_bc_from_fastq(
                     )
                 else:
                     corrected_hydrop_atac_bc = None
-                print("correction done")
+
             if corrected_hydrop_atac_bc and corrected_tagmentation_bc:
-                print("both correct")
                 per_tagmentation_bc_and_with_hydrop_atac_bc_mismatches_stats[
                     corrected_tagmentation_bc.corrected_bc
                 ][corrected_hydrop_atac_bc.hamming_dist] += 1
