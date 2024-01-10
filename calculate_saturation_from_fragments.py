@@ -3,9 +3,9 @@
 import argparse
 import gzip
 import logging
-import os
 
 import matplotlib.pylab as plt
+import matplotlib.ticker as mtick
 import numpy as np
 import pandas as pd
 from scipy.optimize import curve_fit
@@ -94,12 +94,6 @@ def read_bc_and_counts_from_fragments_file(fragments_bed_filename: str) -> pl.Da
     )
 
     return fragments_df
-
-
-def MM(x, Vmax, Km):
-    """Define the Michaelis-Menten Kinetics model that will be used for the model fitting."""
-    y = Vmax * x / (Km + x) if Vmax > 0 and Km > 0 else 10000000000.0
-    return y
 
 
 # sub-sampling function
@@ -320,86 +314,238 @@ def sub_sample_fragments(
     return stats_df
 
 
-# Format axis labels
-def format_axis(text):
-    format_dict = {
-        "mean_frag_per_bc": "Mean fragments / barcode",
-        "median_uniq_frag_per_bc": "Median unique fragments / barcode",
-        "total_frag_count": "Total fragment count",
-    }
-    for i, j in format_dict.items():
-        text = text.replace(i, j)
-    return text
+def MM_fragments(x, Vmax, Km):
+    """Michaelis-Menten Kinetics model for saturation of fragments."""
+    y = Vmax * x / (Km + x) if Vmax > 0 and Km > 0 else 1.0e10
+    return y
 
 
-# MM-fit function
-def fit_MM(
+def MM_duplication(x, Km):
+    """Michaelis-Menten Kinetics model for saturation of duplication."""
+    y = x / (Km + x) if Km > 0 else 1.0e10
+    return y
+
+
+def plot_saturation_fragments(
     stats_df,
-    percentages=[0.3, 0.6, 0.9],
-    saturation_plot_filename="saturation.png",
-    x_axis="total_frag_count",
+    sample,
+    n_reads,
+    n_cells,
+    saturation_percentage,
+    svg_output_path,
+    png_output_path,
+    plot_current_saturation=True,
+    x_axis="mean_reads_per_barcode",
     y_axis="median_uniq_frag_per_bc",
 ):
-    # select x/y data from MM fit from subsampling stats
-    x_data = np.array(stats_df.loc[:, x_axis]) / 10**6
-    y_data = np.array(stats_df.loc[:, y_axis])
-    # fit to MM function
-    best_fit_ab, covar = curve_fit(MM, x_data, y_data, bounds=(0, +np.inf))
-    # expand fit space
-    x_fit = np.linspace(0, int(np.max(x_data) * 100), num=500)
-    y_fit = MM(x_fit, *(best_fit_ab))
-    # impute maximum saturation to plot as 95% of y_max
+    fig, ax = plt.subplots(figsize=(6, 4))
+
+    if x_axis == "mean_reads_per_barcode":
+        x_data = np.array(stats_df.loc[0:, x_axis]) / 10**3
+    else:
+        x_data = np.array(stats_df.loc[0:, x_axis])
+
+    y_data = np.array(stats_df.loc[0:, y_axis])
+
+    # Fit to MM function.
+    best_fit_ab, covar = curve_fit(MM_fragments, x_data, y_data, bounds=(0, +np.inf))
+
+    # Expand fit space.
+    x_fit = np.linspace(0, int(np.max(x_data) * 1000), num=100000)
+    y_fit = MM_fragments(x_fit, *(best_fit_ab))
+
+    # Impute maximum saturation to plot as 95% of y_max.
     y_val = best_fit_ab[0] * 0.95
-    # subset x_fit space if bigger then y_val
+
+    # Subset x_fit space if bigger then y_val.
     if y_val < max(y_fit):
         x_coef = np.where(y_fit >= y_val)[0][0]
         x_fit = x_fit[0:x_coef]
         y_fit = y_fit[0:x_coef]
-    # plot model
-    plt.plot(x_fit, MM(x_fit, *best_fit_ab), label="fitted", c="black", linewidth=1)
-    # plot raw data
-    plt.scatter(x=x_data, y=y_data, c="crimson", s=10)
-    # mark curent saturation
-    x_idx = np.where(y_fit >= max(y_data))[0][0]
-    x_coef = x_fit[x_idx]
-    y_coef = y_fit[x_idx]
-    plt.plot([x_coef, x_coef], [0, y_coef], linestyle="--", c="crimson")
-    plt.plot([0, x_coef], [y_coef, y_coef], linestyle="--", c="crimson")
-    plt.text(
-        x=x_fit[-1],
-        y=y_coef,
-        s=str(round(100 * max(y_data) / best_fit_ab[0])) + f"% {x_coef:.2f}",
-        c="crimson",
-        ha="right",
-        va="bottom",
+
+    # Plot model.
+    ax.plot(
+        x_fit,
+        MM_fragments(x_fit, *best_fit_ab),
+        label="fitted",
+        c="black",
+        linewidth=1,
     )
-    # plot percentaged values
-    for perc in percentages:
-        # Find read count for percent saturation
-        y_val = best_fit_ab[0] * perc
-        # Find closest match in fit
-        if max(y_fit) > y_val:
-            x_idx = np.where(y_fit >= y_val)[0][0]
-            x_coef = x_fit[x_idx]
-            y_coef = y_fit[x_idx]
-            # Draw vline
-            plt.plot([x_coef, x_coef], [0, y_coef], linestyle="--", c="grey")
-            # Draw hline
-            plt.plot([0, x_coef], [y_coef, y_coef], linestyle="--", c="grey")
-            # Plot imputed read count
-            plt.text(
-                x=x_fit[-1],
-                y=y_coef,
-                s=str(round(100 * perc)) + f"% {x_coef:.2f}",
-                c="grey",
-                ha="right",
-                va="bottom",
-            )
-    # save figure
-    plt.xlabel(format_axis(x_axis) + " (millions)")
-    plt.ylabel(format_axis(y_axis))
-    plt.title(os.path.basename(saturation_plot_filename).replace(".saturation.png", ""))
-    plt.savefig(saturation_plot_filename)
+    # Plot raw data.
+    ax.scatter(x=x_data, y=y_data, c="red", s=10)
+
+    # Mark current saturation.
+    curr_x_coef = max(x_data)
+    curr_y_coef = max(y_data)
+    if plot_current_saturation is True:
+        ax.plot([curr_x_coef, curr_x_coef], [0, 9999999], linestyle="--", c="red")
+        ax.plot([0, curr_x_coef], [curr_y_coef, curr_y_coef], linestyle="--", c="red")
+        ax.text(
+            x=curr_x_coef * 1.1,
+            y=curr_y_coef * 0.9,
+            s=str(round(curr_y_coef, 1)) + f" fragments, {curr_x_coef:.2f}" + " kRPC",
+            c="red",
+            ha="left",
+            va="bottom",
+        )
+
+    # Find read count for percent saturation.
+    y_val = best_fit_ab[0] * 0.9 * saturation_percentage
+    # Find the closest match in fit.
+    if max(y_fit) > y_val:
+        x_idx = np.where(y_fit >= y_val)[0][0]
+        x_coef = x_fit[x_idx]
+        y_coef = y_fit[x_idx]
+        # Draw vline.
+        ax.plot([x_coef, x_coef], [0, 9999999], linestyle="--", c="blue")
+        # Draw hline.
+        ax.plot([0, x_coef], [y_coef, y_coef], linestyle="--", c="blue")
+        # Plot imputed read count.
+        ax.text(
+            x=x_coef * 1.1,
+            y=y_coef * 0.9,
+            s=str(round(y_coef, 1)) + f" fragments, {x_coef:.2f}" + " kRPC",
+            c="blue",
+            ha="left",
+            va="bottom",
+        )
+
+    # Get xlim value.
+    y_max = y_fit[-1] * 0.95
+    x_idx = np.where(y_fit >= y_max)[0][0]
+    x_max = x_fit[x_idx]
+    ax.set_xlim([0, x_max])
+    ax.set_ylim([0, y_max])
+
+    # Add second axis.
+    ax2 = ax.twiny()
+    ax2.set_xticks(ax.get_xticks())
+    upper_xticklabels = [str(int(x)) for x in ax.get_xticks() * n_cells / 1000]
+    ax2.set_xticklabels(upper_xticklabels)
+    ax2.set_xlabel("Total reads (millions)")
+    ax2.set_xlim([0, x_max])
+
+    ax.set_xlabel("Reads per cell (thousands)")
+    ax.set_ylabel(y_axis)
+
+    title_str = f"{sample}\n{n_cells} cells, {round(n_reads/1000000)}M reads\nCurrently at {int(curr_y_coef)} {y_axis} with {int(curr_x_coef)} kRPC\nFor {int(saturation_percentage * 100)}% saturation: {int(x_coef * n_cells / 1000)}M reads needed\n"
+    ax.set_title(title_str)
+
+    # Save figure.
+    plt.savefig(png_output_path, dpi=300, bbox_inches="tight")
+    plt.savefig(svg_output_path, dpi=300, bbox_inches="tight")
+
+    plt.close()
+
+
+def plot_saturation_duplication(
+    stats_df,
+    sample,
+    n_reads,
+    n_cells,
+    saturation_percentage,
+    png_output_path,
+    svg_output_path,
+    plot_current_saturation=True,
+    x_axis="mean_reads_per_barcode",
+    y_axis="duplication_rate",
+):
+    fig, ax = plt.subplots(figsize=(6, 4))
+
+    if x_axis == "mean_reads_per_barcode":
+        x_data = np.array(stats_df.loc[0:, x_axis]) / 10**3
+    else:
+        x_data = np.array(stats_df.loc[0:, x_axis])
+    y_data = np.array(stats_df.loc[0:, y_axis])
+
+    # Fit to MM function.
+    best_fit_ab, covar = curve_fit(MM_duplication, x_data, y_data, bounds=(0, +np.inf))
+
+    # Expand fit space.
+    x_fit = np.linspace(0, int(np.max(x_data) * 1000), num=100000)
+    y_fit = MM_duplication(x_fit, *(best_fit_ab))
+
+    # Impute maximum saturation to plot as 95% of y_max.
+    y_val = best_fit_ab[0] * 0.95
+
+    # Subset x_fit space if bigger then y_val.
+    if y_val < max(y_fit):
+        x_coef = np.where(y_fit >= y_val)[0][0]
+        x_fit = x_fit[0:x_coef]
+        y_fit = y_fit[0:x_coef]
+
+    # Plot model.
+    ax.plot(
+        x_fit,
+        MM_duplication(x_fit, *best_fit_ab),
+        label="fitted",
+        c="black",
+        linewidth=1,
+    )
+    # Plot raw data.
+    ax.scatter(x=x_data, y=y_data, c="red", s=10)
+
+    # Mark current saturation.
+    curr_x_coef = max(x_data)
+    curr_y_coef = max(y_data)
+    if plot_current_saturation is True:
+        ax.plot([curr_x_coef, curr_x_coef], [0, 99999], linestyle="--", c="r")
+        ax.plot([0, curr_x_coef], [curr_y_coef, curr_y_coef], linestyle="--", c="r")
+        ax.text(
+            x=curr_x_coef * 1.1,
+            y=curr_y_coef * 0.9,
+            s=str(round(100 * curr_y_coef)) + f"% {curr_x_coef:.2f}" + " kRPC",
+            c="r",
+            ha="left",
+            va="bottom",
+        )
+
+    # Find read count for percent saturation.
+    y_val = saturation_percentage
+    # Find the closest match in fit.
+    if max(y_fit) > y_val:
+        x_idx = np.where(y_fit >= y_val)[0][0]
+        x_coef = x_fit[x_idx]
+        y_coef = y_fit[x_idx]
+        # Draw vline
+        ax.plot([x_coef, x_coef], [0, 99999], linestyle="--", c="blue")
+        # Draw hline
+        ax.plot([0, x_coef], [y_coef, y_coef], linestyle="--", c="blue")
+        # Plot imputed read count
+        ax.text(
+            x=x_coef * 1.1,
+            y=y_coef * 0.9,
+            s=str(round(100 * saturation_percentage)) + f"% @ {x_coef:.2f}" + " kRPC",
+            c="blue",
+            ha="left",
+            va="bottom",
+        )
+
+    # Get xlim value.
+    y_max = 0.9
+    x_idx = np.where(y_fit >= y_max)[0][0]
+    x_max = x_fit[x_idx]
+    ax.set_xlim([0, x_max])
+    ax.set_ylim([0, 1])
+    ax.yaxis.set_major_formatter(mtick.PercentFormatter(1))
+
+    # Add second axis.
+    ax2 = ax.twiny()
+    ax2.set_xticks(ax.get_xticks())
+    upper_xticklabels = [str(int(x)) for x in ax.get_xticks() * n_cells / 1000]
+    ax2.set_xticklabels(upper_xticklabels)
+    ax2.set_xlabel("Total reads (millions)")
+    ax2.set_xlim([0, x_max])
+
+    ax.set_xlabel("Reads per cell (thousands)")
+    ax.set_ylabel("Duplication rate (%)")
+
+    title_str = f"{sample}\n{n_cells} cells, {round(n_reads/1000000)}M reads\nCurrently at {int(curr_y_coef*100)}% duplication rate with {int(curr_x_coef)} kRPC\nFor {int(saturation_percentage*100)}% duplication rate, {int(x_coef*n_cells/1000)}M reads needed\n"
+    ax.set_title(title_str)
+
+    plt.savefig(png_output_path, dpi=300, bbox_inches="tight")
+    plt.savefig(svg_output_path, dpi=300, bbox_inches="tight")
+
     plt.close()
 
 
@@ -428,9 +574,9 @@ def main():
         type=str,
         required=True,
         help=(
-            "Output prefix, which will contain PNG file with saturation curve and TSV"
-            " file with summary of reads and additional reads needed to reach"
-            " saturation specified by percentages."
+            "Output prefix, which will contain SVG/PNG files with saturation curves "
+            "and TSV file with summary of reads and additional reads needed to reach "
+            "saturation specified by percentages."
         ),
     )
     parser.add_argument(
@@ -438,7 +584,7 @@ def main():
         "--raw-reads",
         dest="n_reads",
         action="store",
-        type=str,
+        type=int,
         required=True,
         help="Number of raw sequenced reads for this fragments file.",
     )
@@ -450,20 +596,17 @@ def main():
         help=(
             "Filename with list of selected cell barcodes. "
             "If not specified --min_frags_per_cb is used to get the list of "
-            "selected cell barcodes"
+            "selected cell barcodes."
         ),
         default=None,
     )
     parser.add_argument(
         "-p",
         "--percentages",
-        dest="percentages",
+        dest="saturation_percentages",
         type=str,
-        help=(
-            "Comma separated list of decimal percentages to predict. Default: "
-            '"0.3,0.6,0.9"'
-        ),
-        default="0.3,0.6,0.9",
+        help="Saturation percentages to plot." ' Default: "60,65,70,75" (%%).',
+        default="60,65,70,75",
     )
     parser.add_argument(
         "-m",
@@ -484,13 +627,31 @@ def main():
         ),
         default=sampling_fractions_default_str,
     )
+    parser.add_argument(
+        "-S",
+        "--sample",
+        dest="sample",
+        type=str,
+        help="Sample name to use in the plots. Default: fragments BED filename",
+    )
 
     parser.add_argument("-V", "--version", action="version", version=f"{__version__}")
 
     args = parser.parse_args()
 
+    output_prefix = args.output_prefix.rstrip(".")
+
     sampling_fractions = [float(x) for x in args.sampling_fractions.split(",")]
-    percentages = [float(x) for x in args.percentages.split(",")]
+    if 0.0 not in sampling_fractions:
+        sampling_fractions.append(0.0)
+    if 1.0 not in sampling_fractions:
+        sampling_fractions.append(1.0)
+
+    saturation_percentages = [
+        float(x) / 100.0 for x in args.saturation_percentages.split(",")
+    ]
+
+    sample = args.sample if args.sample else args.fragments_input_bed_filename
 
     # Enable global string cache.
     pl.enable_string_cache()
@@ -514,24 +675,47 @@ def main():
     else:
         cbs_df = None
 
-    # Sub-sample.
+    # Sub-sample and calculate statistics.
     stats_df = sub_sample_fragments(
         fragments_df=fragments_df,
+        n_reads=args.n_reads,
         cbs=cbs_df,
         min_uniq_frag=args.min_frags_per_cb,
         sampling_fractions=sampling_fractions,
-        stats_tsv_filename=f"{args.output_prefix}.sampling_stats.tsv",
+        stats_tsv_filename=f"{output_prefix}.sampling_stats.tsv",
     )
 
-    logger.info("fit_MM.")
-    # Fit'n'plot for total count.
-    fit_MM(
-        stats_df,
-        percentages=percentages,
-        saturation_plot_filename=f"{args.output_prefix}.saturation.png",
-        x_axis="total_frag_count",
-        y_axis="median_uniq_frag_per_bc",
-    )
+    n_cells = stats_df.loc[1.0, "cell_barcode_count"]
+
+    for saturation_percentage in saturation_percentages:
+        logger.info(
+            f"Create plot of saturation of fragments at {saturation_percentage}% saturation."
+        )
+        plot_saturation_fragments(
+            stats_df,
+            sample=sample,
+            n_reads=args.n_reads,
+            n_cells=n_cells,
+            saturation_percentage=saturation_percentage,
+            svg_output_path=f"{output_prefix}.saturation_fragments_{saturation_percentage}perc.svg",
+            png_output_path=f"{output_prefix}.saturation_fragments_{saturation_percentage}perc.png",
+            plot_current_saturation=True,
+        )
+
+        logger.info(
+            f"Create plot of saturation of duplication at {saturation_percentage}% saturation."
+        )
+        plot_saturation_duplication(
+            stats_df,
+            sample=sample,
+            n_reads=args.n_reads,
+            n_cells=n_cells,
+            saturation_percentage=saturation_percentage,
+            svg_output_path=f"{output_prefix}.saturation_duplication_{saturation_percentage}perc.svg",
+            png_output_path=f"{output_prefix}.saturation_duplication_{saturation_percentage}perc.png",
+            plot_current_saturation=True,
+        )
+
     logger.info("Finished.")
 
 
