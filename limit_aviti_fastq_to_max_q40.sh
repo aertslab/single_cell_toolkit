@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (C) 2021-2023 - Gert Hulselmans
+# Copyright (C) 2021-2024 - Gert Hulselmans
 #
 # Purpose:
 #   Limit AVITI FASTQ quality scores to max Q40 as at the moment
@@ -109,13 +109,13 @@ limit_aviti_fastq_to_max_q40 () {
     esac
 
 
-    if ! type "${compress_fastq_cmd%% *}" > /dev/null 2>&1 ; then
-         printf 'Error: "%s" is not installed.\n' "${compress_fastq_cmd%% *}" >&2;
+    if ! type mawk > /dev/null 2>&1 ; then
+         printf 'Error: "mawk" is not installed.\n' >&2;
          return 1;
     fi
 
-    if ! type mawk > /dev/null 2>&1 ; then
-         printf 'Error: "mawk" is not installed.\n' >&2;
+    if ! type "${compress_fastq_cmd%% *}" > /dev/null 2>&1 ; then
+         printf 'Error: "%s" is not installed.\n' "${compress_fastq_cmd%% *}" >&2;
          return 1;
     fi
 

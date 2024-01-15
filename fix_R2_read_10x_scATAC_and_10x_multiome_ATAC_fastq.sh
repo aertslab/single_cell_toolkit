@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (C) 2021-2023 - Gert Hulselmans
+# Copyright (C) 2021-2024 - Gert Hulselmans
 #
 # Purpose:
 #   Fix R2 read FASTQ files for demultiplexing runs with 10x scATAC and
@@ -87,13 +87,13 @@ fix_R2_read_10x_scATAC_and_10x_multiome_ATAC_fastq () {
     esac
 
 
-    if ! type "${compress_fastq_cmd%% *}" > /dev/null 2>&1 ; then
-         printf 'Error: "%s" is not installed.\n' "${compress_fastq_cmd%% *}" >&2;
+    if ! type mawk > /dev/null 2>&1 ; then
+         printf 'Error: "mawk" is not installed.\n' >&2;
          return 1;
     fi
 
-    if ! type mawk > /dev/null 2>&1 ; then
-         printf 'Error: "mawk" is not installed.\n' >&2;
+    if ! type "${compress_fastq_cmd%% *}" > /dev/null 2>&1 ; then
+         printf 'Error: "%s" is not installed.\n' "${compress_fastq_cmd%% *}" >&2;
          return 1;
     fi
 

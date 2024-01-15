@@ -8,6 +8,10 @@
 #   and barcode info in FASTQ comment field.
 
 
+set -e
+set -o pipefail
+
+
 decompress_fastq_cat_cmd='cat';
 decompress_fastq_zcat_cmd='zcat';
 decompress_fastq_igzip_cmd='igzip -c -d';
@@ -38,7 +42,7 @@ extract_and_correct_biorad_barcode_from_fastq () {
     local fastq_R2_filename="${2}";
     local fastq_output_prefix="${3}";
     local interleaved="${4:-false}";
-    local compress_fastq_cmd="${5:-pigz}";
+    local compress_fastq_cmd="${5:-bgzip}";
 
     if [ ${#@} -lt 3 ] ; then
         printf '\nUsage:\n';
@@ -60,8 +64,8 @@ extract_and_correct_biorad_barcode_from_fastq () {
         printf '      - false:  Write R1 and R2 output FASTQ file with reads from R1 and R3 respectively (default).\n';
         printf '  - compress_fastq_cmd:\n';
         printf '      - Compression program to use for output FASTQ files:\n';
-        printf "          - \"bgzip\":  '%s'\n" "${compress_fastq_bgzip_cmd}";
-        printf "          - \"pigz\":   '%s'  (default)\n" "${compress_fastq_pigz_cmd}";
+        printf "          - \"bgzip\":  '%s'  (default)\n" "${compress_fastq_bgzip_cmd}";
+        printf "          - \"pigz\":   '%s'\n" "${compress_fastq_pigz_cmd}";
         printf "          - \"igzip\":  '%s'  (very fast, low compression)\n" "${compress_fastq_igzip_cmd}";
         printf "          - \"gzip\":   '%s'\n" "${compress_fastq_gzip_cmd}";
         printf '          - "stdout":  Write uncompressed output to stdout.\n';
@@ -146,13 +150,13 @@ extract_and_correct_biorad_barcode_from_fastq () {
         return 1;
     fi
 
-    if ! type "${compress_fastq_cmd%% *}" > /dev/null 2>&1 ; then
-        printf 'Error: "%s" not found or executable.\n' "${compress_fastq_cmd%% *}";
+    if ! type mawk > /dev/null 2>&1 ; then
+        printf 'Error: "mawk" not found or executable.\n';
         return 1;
     fi
 
-    if ! type mawk > /dev/null 2>&1 ; then
-        printf 'Error: "mawk" not found or executable.\n';
+    if ! type "${compress_fastq_cmd%% *}" > /dev/null 2>&1 ; then
+        printf 'Error: "%s" not found or executable.\n' "${compress_fastq_cmd%% *}";
         return 1;
     fi
 

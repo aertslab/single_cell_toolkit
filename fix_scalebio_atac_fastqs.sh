@@ -104,13 +104,13 @@ fix_scalebio_atac_fastqs () {
     esac
 
 
-    if ! type "${compress_fastq_cmd%% *}" > /dev/null 2>&1 ; then
-         printf 'Error: "%s" is not installed.\n' "${compress_fastq_cmd%% *}" >&2;
+    if ! type mawk > /dev/null 2>&1 ; then
+         printf 'Error: "mawk" is not installed.\n' >&2;
          return 1;
     fi
 
-    if ! type mawk > /dev/null 2>&1 ; then
-         printf 'Error: "mawk" is not installed.\n' >&2;
+    if ! type "${compress_fastq_cmd%% *}" > /dev/null 2>&1 ; then
+         printf 'Error: "%s" is not installed.\n' "${compress_fastq_cmd%% *}" >&2;
          return 1;
     fi
 

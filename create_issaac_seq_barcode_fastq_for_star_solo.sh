@@ -8,6 +8,10 @@
 #   and 10 bp UMI.
 
 
+set -e
+set -o pipefail
+
+
 decompress_fastq_cat_cmd='cat';
 decompress_fastq_zcat_cmd='zcat';
 decompress_fastq_igzip_cmd='igzip -c -d';
@@ -41,7 +45,7 @@ create_issaac_seq_barcode_fastq_for_star_solo () {
     local fastq_with_corrected_BC_filename="${4}";
     local max_mismatches="${5:-1}";
     local min_frac_bcs_to_find="${6:-0.5}";
-    local compress_fastq_cmd="${7:-pigz}";
+    local compress_fastq_cmd="${7:-bgzip}";
 
     if [ ${#@} -lt 4 ] ; then
         printf '\nUsage:\n';
@@ -72,8 +76,8 @@ create_issaac_seq_barcode_fastq_for_star_solo () {
         printf '        Default: 0.5\n';
         printf '  - compress_fastq_cmd:\n';
         printf '      - Compression program to use for output FASTQ files:\n';
-        printf "          - \"bgzip\":  '%s'\n" "${compress_fastq_bgzip_cmd}";
-        printf "          - \"pigz\":   '%s'  (default)\n" "${compress_fastq_pigz_cmd}";
+        printf "          - \"bgzip\":  '%s'  (default)\n" "${compress_fastq_bgzip_cmd}";
+        printf "          - \"pigz\":   '%s'\n" "${compress_fastq_pigz_cmd}";
         printf "          - \"igzip\":  '%s'  (very fast, low compression)\n" "${compress_fastq_igzip_cmd}";
         printf "          - \"gzip\":   '%s'\n" "${compress_fastq_gzip_cmd}";
         printf '          - "stdout":  Write uncompressed output to stdout.\n';
@@ -132,6 +136,23 @@ create_issaac_seq_barcode_fastq_for_star_solo () {
             fastq_BC_output_filename="${fastq_BC_output_filename%.gz}";
             local compress_fastq_cmd="cat";;
     esac
+
+
+    if ! type mawk > /dev/null 2>&1 ; then
+        printf 'Error: "mawk" not found or executable.\n';
+        return 1;
+    fi
+
+    if ! type "${CODON_OR_SEQ_RUN%% *}" > /dev/null 2>&1 ; then
+        printf 'Error: "%s" not found or executable.\n' "${CODON_OR_SEQ_RUN%% *}";
+        return 1;
+    fi
+
+    if ! type "${compress_fastq_cmd%% *}" > /dev/null 2>&1 ; then
+        printf 'Error: "%s" not found or executable.\n' "${compress_fastq_cmd%% *}";
+        return 1;
+    fi
+
 
     # Get script dir.
     local script_dir="$(cd $(dirname "${BASH_SOURCE}") && pwd)";
@@ -235,7 +256,7 @@ create_issaac_seq_barcode_fastq_for_star_solo () {
             "${fastq_with_corrected_BC_filename%.gz}.corrected_bc_stats.tsv" \
             "${max_mismatches}" \
             "${min_frac_bcs_to_find}" \
-      | pigz -p 4 \
+      | ${compress_fastq_cmd} \
       > "${fastq_with_corrected_BC_filename}";
 
     return $?

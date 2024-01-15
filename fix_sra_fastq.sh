@@ -1,12 +1,16 @@
 #!/bin/bash
 #
-# Copyright (C) 2021 - Gert Hulselmans
+# Copyright (C) 2021-2024 - Gert Hulselmans
 #
 # Purpose:
 #   Fix read names of FASTQ files generated with SRA Toolkit.
 #   If an Illumina read name is specified as first comment in the FASTQ
 #   comment field, it will be used as new read name, else the SRR read
 #   name will be used (without comment fields).
+
+
+set -e
+set -o pipefail
 
 
 decompress_fastq_cat_cmd='cat';
@@ -31,8 +35,8 @@ compress_fastq_gzip_cmd="gzip -${compress_fastq_level} -c";
 
 fix_sra_fastq () {
     local fastq_input_filename="${1}";
-    local fastq_output_filename="${2}";
-    local compress_fastq_cmd="${3:-pigz}";
+    local fastq_output_fi.lename="${2}";
+    local compress_fastq_cmd="${3:-bgzip}";
 
     if [ ${#@} -lt 2 ] ; then
         printf '\nUsage:\n';
@@ -49,8 +53,8 @@ fix_sra_fastq () {
         printf '  - fastq_output:  FASTQ output filename with fixed read name (uncompressed or gzipped).\n';
         printf '  - compress_fastq_cmd:\n';
         printf '      - Compression program to use for output FASTQ files:\n';
-        printf "          - \"bgzip\":  '%s'\n" "${compress_fastq_bgzip_cmd}";
-        printf "          - \"pigz\":   '%s'  (default)\n" "${compress_fastq_pigz_cmd}";
+        printf "          - \"bgzip\":  '%s'  (default)\n" "${compress_fastq_bgzip_cmd}";
+        printf "          - \"pigz\":   '%s'\n" "${compress_fastq_pigz_cmd}";
         printf "          - \"igzip\":  '%s'  (very fast, low compression)\n" "${compress_fastq_igzip_cmd}";
         printf "          - \"gzip\":   '%s'\n" "${compress_fastq_gzip_cmd}";
         printf '          - "stdout":  Write uncompressed output to stdout.\n';
@@ -88,7 +92,7 @@ fix_sra_fastq () {
                 fastq_output_filename='/dev/stdout';
                 local compress_fastq_cmd="cat";;
         esac
-    fi                
+    fi
 
     case "${compress_fastq_cmd}" in
         bgzip)
@@ -108,6 +112,17 @@ fix_sra_fastq () {
             fastq_output_filename="${fastq_R1_output_filename%.gz}";
             local compress_fastq_cmd="cat";;
     esac
+
+
+    if ! type mawk > /dev/null 2>&1 ; then
+        printf 'Error: "mawk" not found or executable.\n';
+        return 1;
+    fi
+
+    if ! type "${compress_fastq_cmd%% *}" > /dev/null 2>&1 ; then
+        printf 'Error: "%s" not found or executable.\n' "${compress_fastq_cmd%% *}";
+        return 1;
+    fi
 
 
     mawk \

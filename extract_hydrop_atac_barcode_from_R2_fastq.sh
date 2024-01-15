@@ -1,10 +1,14 @@
 #!/bin/bash
 #
-# Copyright (C) 2021 - Gert Hulselmans
+# Copyright (C) 2021-2024 - Gert Hulselmans
 #
 # Purpose:
 #   Extract HyDrop ATAC barcodes from R2 fastq read and write a new FASTQ
 #   file which contains only the barcode.
+
+
+set -e
+set -o pipefail
 
 
 decompress_fastq_cat_cmd='cat';
@@ -31,7 +35,7 @@ extract_hydrop_atac_barcode_from_R2_fastq () {
     local fastq_R2_filename="${1}";
     local fastq_R2_BCONLY_filename="${2}";
     local hydrop_atac_barcode_design="${3:-3x96_5L}";
-    local compress_fastq_cmd="${4:-pigz}";
+    local compress_fastq_cmd="${4:-bgzip}";
 
     if [ ${#@} -lt 2 ] ; then
         printf '\nUsage:\n';
@@ -48,8 +52,8 @@ extract_hydrop_atac_barcode_from_R2_fastq () {
         printf '  - hydrop_atac_barcode_design: "3x96_5L" = "v2" (default) or "2x384_10L" = "v1" or "3x96_10L" = "v0" or "10X".\n';
         printf '  - compress_fastq_cmd:\n';
         printf '      - Compression program to use for output FASTQ files:\n';
-        printf "          - \"bgzip\":  '%s'\n" "${compress_fastq_bgzip_cmd}";
-        printf "          - \"pigz\":   '%s'  (default)\n" "${compress_fastq_pigz_cmd}";
+        printf "          - \"bgzip\":  '%s'  (default)\n" "${compress_fastq_bgzip_cmd}";
+        printf "          - \"pigz\":   '%s'\n" "${compress_fastq_pigz_cmd}";
         printf "          - \"igzip\":  '%s'  (very fast, low compression)\n" "${compress_fastq_igzip_cmd}";
         printf "          - \"gzip\":   '%s'\n" "${compress_fastq_gzip_cmd}";
         printf '          - "stdout":  Write uncompressed output to stdout.\n';
@@ -148,6 +152,17 @@ extract_hydrop_atac_barcode_from_R2_fastq () {
             fastq_R2_BCONLY_filename="${fastq_R2_BCONLY_filename%.gz}";
             local compress_fastq_cmd="cat";;
     esac
+
+
+    if ! type mawk > /dev/null 2>&1 ; then
+        printf 'Error: "mawk" not found or executable.\n';
+        return 1;
+    fi
+
+    if ! type "${compress_fastq_cmd%% *}" > /dev/null 2>&1 ; then
+        printf 'Error: "%s" not found or executable.\n' "${compress_fastq_cmd%% *}";
+        return 1;
+    fi
 
 
     ${decompress_R2_fastq_cmd} "${fastq_R2_filename}" \

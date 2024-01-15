@@ -126,6 +126,18 @@ extract_and_correct_scalebio_atac_barcode_from_fastq () {
         return 1;
     fi
 
+
+    if ! type "${CODON_OR_SEQ_RUN%% *}" > /dev/null 2>&1 ; then
+        printf 'Error: "%s" not found or executable.\n' "${CODON_OR_SEQ_RUN%% *}";
+        return 1;
+    fi
+
+    if ! type zstd > /dev/null 2>&1 ; then
+        printf 'Error: "zstd" not found or executable.\n';
+        return 1;
+    fi
+
+
     # Get script dir.
     local script_dir="$(cd $(dirname "${BASH_SOURCE}") && pwd)";
 

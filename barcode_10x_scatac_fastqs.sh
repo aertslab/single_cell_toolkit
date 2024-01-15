@@ -1,10 +1,14 @@
 #!/bin/bash
 #
-# Copyright (C) 2020-2021 - Gert Hulselmans
+# Copyright (C) 2020-2024 - Gert Hulselmans
 #
 # Purpose:
 #   Barcode 10x scATAC FASTQ files by adding the cell barcode from R2 to each
 #   read in R1 and R3, as a comment or in front of the original read name.
+
+
+set -e
+set -o pipefail
 
 
 decompress_fastq_cat_cmd='cat';
@@ -34,7 +38,7 @@ barcode_10x_scatac_fastqs () {
     local fastq_output_prefix="${4}";
     local interleaved="${5:-false}";
     local add_barcode_in_comment="${6:-true}";
-    local compress_fastq_cmd="${8:-pigz}";
+    local compress_fastq_cmd="${8:-bgzip}";
 
     if [ ${#@} -lt 4 ] ; then
         printf '\nUsage:\n';
@@ -70,8 +74,8 @@ barcode_10x_scatac_fastqs () {
         printf '          (default: "-").\n';
         printf '  - compress_fastq_cmd:\n';
         printf '      - Compression program to use for output FASTQ files:\n';
-        printf "          - \"bgzip\":  '%s'\n" "${compress_fastq_bgzip_cmd}";
-        printf "          - \"pigz\":   '%s'  (default)\n" "${compress_fastq_pigz_cmd}";
+        printf "          - \"bgzip\":  '%s'  (default)\n" "${compress_fastq_bgzip_cmd}";
+        printf "          - \"pigz\":   '%s'\n" "${compress_fastq_pigz_cmd}";
         printf "          - \"igzip\":  '%s'  (very fast, low compression)\n" "${compress_fastq_igzip_cmd}";
         printf "          - \"gzip\":   '%s'\n" "${compress_fastq_gzip_cmd}";
         printf '          - "stdout":  Write uncompressed output to stdout.\n';
@@ -178,6 +182,17 @@ barcode_10x_scatac_fastqs () {
             fastq_R2_output_filename="${fastq_R2_output_filename%.gz}";
             local compress_fastq_cmd="cat";;
     esac
+
+
+    if ! type mawk > /dev/null 2>&1 ; then
+        printf 'Error: "mawk" not found or executable.\n';
+        return 1;
+    fi
+
+    if ! type "${compress_fastq_cmd%% *}" > /dev/null 2>&1 ; then
+        printf 'Error: "%s" not found or executable.\n' "${compress_fastq_cmd%% *}";
+        return 1;
+    fi
 
 
     mawk \

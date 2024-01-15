@@ -1,9 +1,13 @@
 #!/bin/bash
 #
-# Copyright (C) 2020-2021 - Gert Hulselmans
+# Copyright (C) 2020-2024 - Gert Hulselmans
 #
 # Purpose:
 #   Filter FASTQ by list of read names.
+
+
+set -e
+set -o pipefail
 
 
 decompress_fastq_cat_cmd='cat';
@@ -32,7 +36,7 @@ filter_fastq_by_read_names () {
     local fastq_R2_filename="${3}";
     local fastq_R3_filename="${4}";
     local fastq_output_prefix="${5}";
-    local compress_fastq_cmd="${6:-pigz}";
+    local compress_fastq_cmd="${6:-bgzip}";
 
     if [ ${#@} -lt 5 ] ; then
         printf '\nUsage:\n';
@@ -52,8 +56,8 @@ filter_fastq_by_read_names () {
         printf '  - fastq_output_prefix: Output prefix for FASTQ output file(s).\n';
         printf '  - compress_fastq_cmd:\n';
         printf '      - Compression program to use for output FASTQ files:\n';
-        printf "          - \"bgzip\":  '%s'\n" "${compress_fastq_bgzip_cmd}";
-        printf "          - \"pigz\":   '%s'  (default)\n" "${compress_fastq_pigz_cmd}";
+        printf "          - \"bgzip\":  '%s'  (default)\n" "${compress_fastq_bgzip_cmd}";
+        printf "          - \"pigz\":   '%s'\n" "${compress_fastq_pigz_cmd}";
         printf "          - \"igzip\":  '%s'  (very fast, low compression)\n" "${compress_fastq_igzip_cmd}";
         printf "          - \"gzip\":   '%s'\n" "${compress_fastq_gzip_cmd}";
         printf '          - "stdout":  Write uncompressed output to stdout.\n';
@@ -130,6 +134,17 @@ filter_fastq_by_read_names () {
             fastq_R3_output_filename="${fastq_R3_output_filename%.gz}";
             local compress_fastq_cmd="cat";;
     esac
+
+
+    if ! type mawk > /dev/null 2>&1 ; then
+        printf 'Error: "mawk" not found or executable.\n';
+        return 1;
+    fi
+
+    if ! type "${compress_fastq_cmd%% *}" > /dev/null 2>&1 ; then
+        printf 'Error: "%s" not found or executable.\n' "${compress_fastq_cmd%% *}";
+        return 1;
+    fi
 
 
     mawk \

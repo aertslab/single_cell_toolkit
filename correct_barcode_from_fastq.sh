@@ -88,10 +88,23 @@ correct_barcode_from_fastq () {
             fi;;
     esac
 
+
     if [ ! -e "${fastq_with_raw_bc_filename}" ] ; then
         printf 'Error: FASTQ file with raw barcodes "%s" could not be found.\n' "${fastq_with_raw_bc_filename}" >&2;
         return 1;
     fi
+
+
+    if ! type "${CODON_OR_SEQ_RUN%% *}" > /dev/null 2>&1 ; then
+        printf 'Error: "%s" not found or executable.\n' "${CODON_OR_SEQ_RUN%% *}";
+        return 1;
+    fi
+
+    if ! type zstd > /dev/null 2>&1 ; then
+        printf 'Error: "zstd" not found or executable.\n';
+        return 1;
+    fi
+
 
     local first_barcode='';
 
@@ -126,7 +139,6 @@ correct_barcode_from_fastq () {
     local script_dir="$(cd $(dirname "${BASH_SOURCE}") && pwd)";
 
     # Correct barcodes in index 2 FASTQ file:
-    #   - Replace "type K = Kmer[16]" with the correct barcode length in the correct_barcode_from_fastq.seq script.
     ${CODON_OR_SEQ_RUN} \
         -D bc_length="${bc_length}" \
         "${script_dir}/correct_barcode_from_fastq.seq" \
