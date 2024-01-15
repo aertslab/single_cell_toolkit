@@ -1,0 +1,560 @@
+from bio import *
+
+import gzip
+import sys
+
+from .utils import read_line_from_uncompressed_or_gzipped_file
+
+
+def read_barcode_whitelist_from_file(
+    bc_whitelist_filename: str,
+    bc_length: Static[int],
+    bc_column_idx: int = 0,
+    warning: bool=True
+):
+    """
+    Read whitelisted barcodes from file and convert to a set of Kmers.
+
+    Parameters
+    ----------
+    bc_whitelist_filename
+        Filename with whitelisted barcodes.
+    bc_length
+        Length of barcode.
+    bc_column_idx
+        Column index in which the cell barcode can be found.
+        Default: 0 (first column).
+    warning
+        Print warnings.
+
+    Returns
+    -------
+    Set with barcodes as Kmers.
+    """
+
+    bc_whitelist = set()
+
+    for bc_line in read_line_from_uncompressed_or_gzipped_file(bc_whitelist_filename):
+        bc_line = bc_line.strip()
+        if len(bc_line) == 0 or bc_line[0] == "#":
+            # Skip empty lines and lines that start with a comment.
+            continue
+
+        columns = bc_line.split("\t")
+
+        if len(columns) <= bc_column_idx:
+            print(
+                f"Error: Barcode file does not have column {bc_column_idx + 1}",
+                file=sys.stderr
+            )
+            continue
+
+        bc_str = columns[bc_column_idx]
+        bc_length_current_line = len(bc_str)
+
+        if bc_length_current_line == 0 or bc_str[0] == "#":
+            # Skip empty barcodes and barcodes that start with a comment.
+            continue
+
+        if bc_length != bc_length_current_line:
+            # Skip barcodes if they have a different length than the Kmer length.
+            if warning:
+                print(
+                    f'Warning: Barcode "{bc_str}" is skipped (barcode length of ' +
+                    f"{bc_length_current_line} instead of requested {bc_length}).",
+                    file=sys.stderr
+                )
+            continue
+
+        if "N" in bc_str:
+            # Skip barcodes if they have an N.
+            if warning:
+                print(
+                    f'Warning: Barcode "{bc_str}" is skipped as it contains an "N".',
+                    file=sys.stderr
+                )
+            continue
+
+        bc = Kmer[bc_length](seq(bc_str))
+        bc_whitelist.add(bc)
+
+    return bc_whitelist
+
+
+def read_barcode_whitelist_from_file_as_list(
+    bc_whitelist_filename: str,
+    bc_column_idx: int = 0,
+    warning: bool=True
+):
+    """
+    Read whitelisted barcodes from file as a list.
+
+    Parameters
+    ----------
+    bc_whitelist_filename
+        Filename with whitelisted barcodes.
+    bc_length
+        Length of barcode.
+    bc_column_idx
+        Column index in which the cell barcode can be found.
+        Default: 0 (first column).
+    warning
+        Print warnings.
+
+    Returns
+    -------
+    List with barcodes as strings.
+    """
+
+    bc_whitelist = list()
+    bc_length_prev_line = -1
+
+    for bc_line in read_line_from_uncompressed_or_gzipped_file(bc_whitelist_filename):
+        bc_line = bc_line.strip()
+        if len(bc_line) == 0 or bc_line[0] == "#":
+            # Skip empty lines and lines that start with a comment.
+            continue
+
+        columns = bc_line.split("\t")
+
+        if len(columns) <= bc_column_idx:
+            print(
+                f"Error: Barcode file does not have column {bc_column_idx + 1}",
+                file=sys.stderr
+            )
+
+        bc_str = columns[bc_column_idx]
+        bc_length_current_line = len(bc_str)
+
+        if bc_length_current_line == 0 or bc_str[0] == "#":
+            # Skip empty barcodes and barcodes that start with a comment.
+            continue
+
+        if bc_length_prev_line != -1:
+            if bc_length_prev_line != bc_length_current_line:
+                # Skip barcodes if they have a different length than the Kmer length.
+                if warning:
+                    print(
+                        f'Warning: Barcode "{bc_str}" is skipped (barcode length of ' +
+                        f"{bc_length_current_line} instead of {bc_length_prev_line}).",
+                        file=sys.stderr
+                    )
+                continue
+
+        if "N" in bc_str:
+            # Skip barcodes if they have an N.
+            if warning:
+                print(
+                    f'Warning: Barcode "{bc_str}" is skipped as it contains an "N".',
+                    file=sys.stderr
+                )
+            continue
+
+        bc_whitelist.append(bc_str)
+        bc_length_prev_line = bc_length_current_line
+
+    return bc_whitelist
+
+
+def map_barcodes_from_whitelist1_to_whitelist2(
+    bc_whitelist_filename: str,
+    bc_remapping_filename: Optional[str],
+    bc_column_idxs: tuple[int, int] = (0, 0),
+    warning: bool = True
+) -> Optional[dict[str, str]]:
+    """
+    Create barcode mapping from barcodes in file 1 to barcodes in file 2.
+
+    If bc_remapping_filename is None, "", "none" or "false", no barcode mapping is created.
+
+    Parameters
+    ----------
+    bc_whitelist_filename
+        Filename with whitelisted barcodes.
+    bc_remapping_filename
+        Filename with whitelisted barcodes to which the first list of barcodes will be mapped.
+    bc_column_idxs
+        Column indexes in which the cell barcode can be found for each barcode whiltelist file.
+        Default: (0, 0) (first column for both).
+    warning
+        Print warnings.
+
+    Returns
+    -------
+    Dictionary with mapping of barcodes from whitelist 1 to whitelist 2.
+
+    """
+    if not bc_remapping_filename:
+        return None
+    elif bc_remapping_filename.lower() == "none" or bc_remapping_filename.lower() == "false":
+        return None
+
+    bc_whitelist = read_barcode_whitelist_from_file_as_list(
+        bc_whitelist_filename=bc_whitelist_filename,
+        bc_column_idx=bc_column_idxs[0],
+        warning=warning,
+    )
+
+    bc_remapping_whitelist = read_barcode_whitelist_from_file_as_list(
+        bc_whitelist_filename=bc_remapping_filename,
+        bc_column_idx=bc_column_idxs[1],
+        warning=warning,
+    )
+
+    if len(bc_whitelist) != len(bc_remapping_whitelist):
+        raise ValueError(
+            "Barcode whitelists do not have the same number of barcodes: " +
+            f"{len(bc_whitelist)} vs {len(bc_remapping_whitelist)}'"
+        )
+
+    return {bc1: bc2 for bc1, bc2 in zip(bc_whitelist, bc_remapping_whitelist)}
+
+
+def hamming_dist1_neighbors(kmer):
+    """
+    Yield all kmers with hamming distance of 1.
+
+    """
+    for i in range(len(kmer)):
+        for b in (k"A", k"C", k"G", k"T"):
+            if kmer[i] != b:
+                yield kmer |> base(i, b)
+
+
+neighbors = hamming_dist1_neighbors
+
+
+def hamming_dist2_neighbors(kmer):
+    """
+    Yield all kmers with hamming distance of 2.
+
+    """
+    for i in range(0, len(kmer) - 1):
+        for j in range(i + 1, len(kmer)):
+            if i < j:
+                for b1 in (k"A", k"C", k"G", k"T"):
+                    if kmer[i] != b1:
+                        for b2 in (k"A", k"C", k"G", k"T"):
+                           if kmer[j] != b2:
+                               yield kmer |> base(i, b1) |> base(j, b2)
+
+
+def hamming_dist3_neighbors(kmer):
+    """
+    Yield all kmers with hamming distance of 3.
+
+    """
+    for i in range(0, len(kmer) - 2):
+        for j in range(i + 1, len(kmer) - 1):
+            for k in range(i + 2, len(kmer)):
+                if i < j:
+                    for b1 in (k"A", k"C", k"G", k"T"):
+                        if kmer[i] != b1:
+                            for b2 in (k"A", k"C", k"G", k"T"):
+                                if kmer[j] != b2:
+                                    for b3 in (k"A", k"C", k"G", k"T"):
+                                        if kmer[k] != b3:
+                                            yield kmer |> base(i, b1) |> base(j, b2) |> base(k, b3)
+
+
+def hamming_dist_neighbors(kmer, hamming_dist: int):
+    """
+    Yield all kmmers with hamming distance of 1, 2 or 3.
+
+    """
+    match hamming_dist:
+        case 1:
+            return hamming_dist1_neighbors(kmer)
+        case 2:
+            return hamming_dist2_neighbors(kmer)
+        case 3:
+            return hamming_dist3_neighbors(kmer)
+        case _:
+            raise ValueError("Only hamming distances 1, 2 and 3 are supported.")
+
+
+@inline
+def get_qual_sorted_idx(qual):
+    """
+    Sort quality scores from low to high and return the index positions of the sorted
+    array.
+
+    """
+    qual_sorted_idx = list(
+        map(
+            lambda x: x[0],
+            sorted(
+                enumerate(qual),
+                key=lambda x: x[1],
+                algorithm="insertion",
+                reverse=False
+            ) 
+        )
+    )
+
+    return qual_sorted_idx
+
+
+def hamming_dist1_neighbors_by_qual_order(kmer, qual):
+    """
+    Yield all kmers with hamming distance of 1, but start mutating original kmer at
+    postition with lowest base quality score to position with highest base quality
+    score.
+
+    """
+    assert len(kmer) == len(qual)
+
+    qual_sorted_idx = get_qual_sorted_idx(qual)
+
+    for i in range(len(kmer)):
+        for b in (k"A", k"C", k"G", k"T"):
+            if kmer[qual_sorted_idx[i]] != b:
+                yield kmer |> base(qual_sorted_idx[i], b)
+
+
+def hamming_dist2_neighbors_by_qual_order(kmer, qual):
+    """
+    Yield all kmers with hamming distance of 2, but start mutating original kmer at
+    postition with lowest base quality score to position with highest base quality
+    score.
+    """
+
+    assert len(kmer) == len(qual)
+
+    qual_sorted_idx = get_qual_sorted_idx(qual)
+
+    for i in range(0, len(kmer) - 1):
+        for j in range(i + 1, len(kmer)):
+            if i < j:
+                for b1 in (k"A", k"C", k"G", k"T"):
+                    if kmer[qual_sorted_idx[i]] != b1:
+                        for b2 in (k"A", k"C", k"G", k"T"):
+                           if kmer[qual_sorted_idx[j]] != b2:
+                               yield kmer |> base(qual_sorted_idx[i], b1) |> base(qual_sorted_idx[j], b2)
+
+
+def hamming_dist3_neighbors_by_qual_order(kmer, qual):
+    """
+    Yield all kmers with hamming distance of 3, but start mutating original kmer at
+    postition with lowest base quality score to position with highest base quality
+    score.
+
+    """
+    assert len(kmer) == len(qual)
+
+    qual_sorted_idx = get_qual_sorted_idx(qual)
+
+    for i in range(0, len(kmer) - 2):
+        for j in range(i + 1, len(kmer) - 1):
+            for k in range(i + 2, len(kmer)):
+                if i < j:
+                    for b1 in (k"A", k"C", k"G", k"T"):
+                        if kmer[qual_sorted_idx[i]] != b1:
+                            for b2 in (k"A", k"C", k"G", k"T"):
+                                if kmer[qual_sorted_idx[j]] != b2:
+                                    for b3 in (k"A", k"C", k"G", k"T"):
+                                        if kmer[qual_sorted_idx[k]] != b3:
+                                            yield kmer |> base(qual_sorted_idx[i], b1) |> base(qual_sorted_idx[j], b2) |> base(qual_sorted_idx[k], b3)
+
+
+def hamming_dist_neighbors_by_qual_order(kmer, qual, hamming_dist: int):
+    """
+    Yield all kmers with hamming distance of 1, 2 or 3, but start mutating original
+    kmer at postition with lowest base quality score to position with highest base
+    quality score.
+
+    """
+    match hamming_dist:
+        case 1:
+            return hamming_dist1_neighbors_by_qual_order(kmer, qual)
+        case 2:
+            return hamming_dist2_neighbors_by_qual_order(kmer, qual)
+        case 3:
+            return hamming_dist3_neighbors_by_qual_order(kmer, qual)
+        case _:
+            raise ValueError("Only hamming distances 1, 2 and 3 are supported.")
+
+
+@tuple
+class CorrectedBc:
+    hamming_dist: int
+    corrected_bc: str
+
+    def __new__(hamming_dist: int, corrected_bc: str) -> CorrectedBc:
+        return (hamming_dist, corrected_bc)
+
+
+def correct_bc_with_whitelist(
+    bc_whitelist,
+    bc,
+    max_hamming_dist: Optional[int]=None
+) -> Optional[CorrectedBc]:
+    """
+    Check if provided barcode matches the whitelist with up to max_hamming_dist
+    (0, 1, 2 or 3) mismatches.
+
+    """
+    max_hamming_distx = ~max_hamming_dist if max_hamming_dist else 3
+    max_hamming_distx = 3 if max_hamming_distx == -1 else max_hamming_distx
+
+    if bc in bc_whitelist:
+        # Exact match.
+        return CorrectedBc(0, str(bc))
+
+    if max_hamming_distx >= 1:
+        for hamming_dist1_neighbor in hamming_dist1_neighbors(bc):
+            if hamming_dist1_neighbor in bc_whitelist:
+                # Hamming neighbor in whitelist (distance = 1).
+                return CorrectedBc(1, str(hamming_dist1_neighbor))
+
+    if max_hamming_distx >= 2:
+        for hamming_dist2_neighbor in hamming_dist2_neighbors(bc):
+            if hamming_dist2_neighbor in bc_whitelist:
+                # Hamming neighbor in whitelist (distance = 2).
+                return CorrectedBc(2, str(hamming_dist2_neighbor))
+
+    if max_hamming_distx >= 3:
+        for hamming_dist3_neighbor in hamming_dist3_neighbors(bc):
+            if hamming_dist3_neighbor in bc_whitelist:
+                # Hamming neighbor in whitelist (distance = 3).
+                return CorrectedBc(3, str(hamming_dist3_neighbor))
+
+    # Hamming distance greater than max_hamming_dist or greater than 3.
+    return None
+
+
+def correct_bc_by_qual_order_with_whitelist(
+    bc_whitelist,
+    bc,
+    qual,
+    max_hamming_dist: Optional[int]=None
+) -> Optional[CorrectedBc]:
+    """
+    Check if provided barcode matches the whitelist with up to max_hamming_dist
+    (0, 1, 2 or 3) mismatches by starting mutating original kmer at postition
+    with lowest base quality score to position with highest base quality score.
+
+    """
+    if len(bc) != len(qual):
+        raise ValueError(
+            f'Barcode ("{str(bc)}") and quality string ("{qual}") should have the ' +
+            "same length."
+        )
+
+    max_hamming_distx = ~max_hamming_dist if max_hamming_dist else 3
+    max_hamming_distx = 3 if max_hamming_distx == -1 else max_hamming_distx
+
+    if bc in bc_whitelist:
+        # Exact match.
+        return CorrectedBc(0, str(bc))
+
+    if max_hamming_distx >= 1:
+        for hamming_dist1_neighbor in hamming_dist1_neighbors_by_qual_order(bc, qual):
+            if hamming_dist1_neighbor in bc_whitelist:
+                # Hamming neighbor in whitelist (distance = 1).
+                return CorrectedBc(1, str(hamming_dist1_neighbor))
+
+    if max_hamming_distx >= 2:
+        for hamming_dist2_neighbor in hamming_dist2_neighbors_by_qual_order(bc, qual):
+            if hamming_dist2_neighbor in bc_whitelist:
+                # Hamming neighbor in whitelist (distance = 2).
+                return CorrectedBc(2, str(hamming_dist2_neighbor))
+
+    if max_hamming_distx >= 3:
+        for hamming_dist3_neighbor in hamming_dist3_neighbors_by_qual_order(bc, qual):
+            if hamming_dist3_neighbor in bc_whitelist:
+                # Hamming neighbor in whitelist (distance = 3).
+                return CorrectedBc(3, str(hamming_dist3_neighbor))
+
+    # Hamming distance greater than max_hamming_dist or greater than 3.
+    return None
+
+
+def correct_bc_with_Ns_with_whitelist(
+    bc_whitelist,
+    bc_length: Static[int],
+    bc_with_Ns: str,
+    max_hamming_dist: Optional[int]=None
+) -> Optional[CorrectedBc]:
+    """
+    Check if provided barcode with Ns matches the whitelist with up to
+    max_hamming_dist (0, 1, 2 or 3) mismatches (only Ns will be corrected).
+
+    """
+    max_hamming_distx = ~max_hamming_dist if max_hamming_dist else 3
+    max_hamming_distx = 3 if max_hamming_distx == -1 else max_hamming_distx
+
+    n_count = 0
+    n_positions = List[int](capacity=len(bc_with_Ns))
+
+    for idx, nuc in enumerate(bc_with_Ns):
+        if nuc == "N":
+            n_count += 1
+            n_positions.append(idx)
+
+    if n_count > max_hamming_distx:
+        # Do not try to correct barcode, if there are more Ns than max allowed hamming
+        # distance.
+        return None
+
+    # Convert barcode with Ns to a kmer.
+    bc = Kmer[bc_length](bc_with_Ns.replace("N", "A"))
+
+    if n_count == 1:
+        for b in (k"A", k"C", k"G", k"T"):
+            bc = bc |> base(n_positions[0], b)
+
+            if bc in bc_whitelist:
+                return CorrectedBc(1, str(bc))
+    elif n_count == 2:
+        for b1 in (k"A", k"C", k"G", k"T"):
+            for b2 in (k"A", k"C", k"G", k"T"):
+                bc = bc |> base(n_positions[0], b1) |> base(n_positions[1], b2)
+
+                if bc in bc_whitelist:
+                    return CorrectedBc(2, str(bc))
+    elif n_count == 3:
+        for b1 in (k"A", k"C", k"G", k"T"):
+            for b2 in (k"A", k"C", k"G", k"T"):
+                for b3 in (k"A", k"C", k"G", k"T"):
+                    bc = bc |> base(n_positions[0], b1) |> base(n_positions[1], b2) |> base(n_positions[2], b3)
+
+                    if bc in bc_whitelist:
+                        return CorrectedBc(3, str(bc))
+
+    # Ns in barcode could not be corrected.
+    return None
+
+
+def correct_bc_by_qual_order_with_whitelist_or_correct_bc_with_Ns_with_whitelist(
+    bc_whitelist,
+    bc_length: Static[int],
+    bc_seq: seq,
+    bc_qual: str,
+    max_hamming_dist: Optional[int]=None
+) -> Optional[CorrectedBc]:
+    """
+    Check if provided barcode matches the whitelist with up to max_hamming_dist
+    (0, 1, 2 or 3) mismatches by starting mutating original kmer at postition
+    with lowest base quality score to position with highest base quality score
+    or check if provided barcode with Ns matches the whitelist with up to
+    max_hamming_dist (0, 1, 2 or 3) mismatches (only Ns will be corrected).
+
+    """
+    corrected_bc = (
+        correct_bc_with_Ns_with_whitelist(
+            bc_whitelist,
+            bc_length,
+            str(bc_seq),
+            max_hamming_dist,
+        )
+        if "N" in str(bc_seq)
+        else correct_bc_by_qual_order_with_whitelist(
+            bc_whitelist,
+            Kmer[bc_length](bc_seq),
+            bc_qual,
+            max_hamming_dist,
+        )
+    )
+
+    return corrected_bc
