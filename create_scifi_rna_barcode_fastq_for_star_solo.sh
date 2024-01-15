@@ -165,11 +165,8 @@ create_scifi_rna_barcode_fastq_for_star_solo () {
     mawk \
         -v fastq_R1_filename="${fastq_R1_filename}" \
         -v fastq_I2_filename="${fastq_I2_filename}" \
-        -v fastq_with_corrected_BC_filename="${fastq_with_corrected_BC_filename}" \
         -v decompress_R1_fastq_cmd="${decompress_R1_fastq_cmd}" \
         -v decompress_I2_fastq_cmd="${decompress_I2_fastq_cmd}" \
-        -v decompress_corrected_bc_file_cmd="${decompress_corrected_bc_file_cmd}" \
-        -v compress_fastq_cmd="${compress_fastq_cmd}" \
     '
     BEGIN {
         read_fastq_R1_cmd = decompress_R1_fastq_cmd " " fastq_R1_filename;
@@ -237,7 +234,6 @@ create_scifi_rna_barcode_fastq_for_star_solo () {
 
                     # Write the RT barcode, 10x scATAC barcode and UMI to FASTQ record.
                     print "@" read_name_R1 "\n" RT_BC_seq sequence_I2 UMI_seq "\n+\n" RT_BC_qual fastq_I2_line UMI_qual;
-                    # | write_fastq_BC_cmd;
                 }
             }
         }

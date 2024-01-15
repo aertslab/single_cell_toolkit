@@ -165,11 +165,8 @@ create_issaac_seq_barcode_fastq_for_star_solo () {
     mawk \
         -v fastq_R2_filename="${fastq_R2_filename}" \
         -v fastq_I2_filename="${fastq_I2_filename}" \
-        -v fastq_with_corrected_BC_filename="${fastq_with_corrected_BC_filename}" \
         -v decompress_R2_fastq_cmd="${decompress_R2_fastq_cmd}" \
         -v decompress_I2_fastq_cmd="${decompress_I2_fastq_cmd}" \
-        -v decompress_corrected_bc_file_cmd="${decompress_corrected_bc_file_cmd}" \
-        -v compress_fastq_cmd="${compress_fastq_cmd}" \
     '
     BEGIN {
         read_fastq_R2_cmd = decompress_R2_fastq_cmd " " fastq_R2_filename;
@@ -239,7 +236,6 @@ create_issaac_seq_barcode_fastq_for_star_solo () {
 
                     # Write the HyDrop RNA barcode and UMI to FASTQ record.
                     print "@" read_name_R2 "\n" BC_seq UMI_seq "\n+\n" RT_BC_qual fastq_I2_line UMI_qual;
-                    # | write_fastq_BC_cmd;
                 }
             }
         }
