@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (C) 2021 - Gert Hulselmans
+# Copyright (C) 2021-2024 - Gert Hulselmans
 #
 # Purpose:
 #   Extract barcodes and ATAC part of read from BioRad v2.1 FASTQ files,
@@ -25,6 +25,11 @@ compress_fastq_bgzip_cmd="bgzip -@ ${compress_fastq_threads} -l ${compress_fastq
 compress_fastq_pigz_cmd="pigz -p ${compress_fastq_threads} -${compress_fastq_level} -c";
 compress_fastq_igzip_cmd="igzip -${compress_fastq_igzip_level} -c";
 compress_fastq_gzip_cmd="gzip -${compress_fastq_level} -c";
+
+
+SEQC_RUN="seqc run -release";
+CODON_RUN="codon run -plugin seq -release";
+CODON_OR_SEQ_RUN="${CODON_OR_SEQ_RUN:-${CODON_RUN}}";
 
 
 
@@ -135,6 +140,23 @@ extract_and_correct_biorad_barcode_from_fastq () {
             local compress_fastq_cmd="cat";;
     esac
 
+
+    if ! type "${CODON_OR_SEQ_RUN%% *}" > /dev/null 2>&1 ; then
+        printf 'Error: "%s" not found or executable.\n' "${CODON_OR_SEQ_RUN%% *}";
+        return 1;
+    fi
+
+    if ! type "${compress_fastq_cmd%% *}" > /dev/null 2>&1 ; then
+        printf 'Error: "%s" not found or executable.\n' "${compress_fastq_cmd%% *}";
+        return 1;
+    fi
+
+    if ! type mawk > /dev/null 2>&1 ; then
+        printf 'Error: "mawk" not found or executable.\n';
+        return 1;
+    fi
+
+
     # Get script dir.
     local script_dir="$(cd $(dirname "${BASH_SOURCE}") && pwd)";
 
@@ -144,7 +166,7 @@ extract_and_correct_biorad_barcode_from_fastq () {
     # and barcode info in FASTQ comment field.
     # Pipe the new R1 FASTQ into mawk, fix read name comments in R2 reads and
     # write both fixed FASTQ files.
-    seqc run --release \
+    "${CODON_OR_SEQ_RUN}" \
         "${script_dir}/extract_and_correct_biorad_barcode_from_fastq.seq" \
             "${fastq_R1_filename}" \
             '/dev/stdout' \

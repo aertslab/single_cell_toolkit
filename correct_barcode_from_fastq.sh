@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (C) 2020-2023 - Gert Hulselmans
+# Copyright (C) 2020-2024 - Gert Hulselmans
 #
 # Purpose:
 #   Read index 2 FASTQ file with raw barcode reads and correct them
@@ -16,6 +16,11 @@
 
 set -e
 set -o pipefail
+
+
+SEQC_RUN="seqc run -release";
+CODON_RUN="codon run -plugin seq -release";
+CODON_OR_SEQ_RUN="${CODON_OR_SEQ_RUN:-${CODON_RUN}}";
 
 
 
@@ -122,9 +127,8 @@ correct_barcode_from_fastq () {
 
     # Correct barcodes in index 2 FASTQ file:
     #   - Replace "type K = Kmer[16]" with the correct barcode length in the correct_barcode_from_fastq.seq script.
-    seqc run \
+    ${CODON_OR_SEQ_RUN} \
         -D bc_length="${bc_length}" \
-        -release \
         "${script_dir}/correct_barcode_from_fastq.seq" \
             "${bc_whitelist_filename}" \
             "${bc_remapping_filename}" \

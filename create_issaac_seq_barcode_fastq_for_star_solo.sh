@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (C) 2020-2023 - Gert Hulselmans
+# Copyright (C) 2020-2024 - Gert Hulselmans
 #
 # Purpose:
 #   Create corrected ISSAAC-seq barcode FASTQ file for usage with STAR solo.
@@ -26,6 +26,11 @@ compress_fastq_bgzip_cmd="bgzip -@ ${compress_fastq_threads} -l ${compress_fastq
 compress_fastq_pigz_cmd="pigz -p ${compress_fastq_threads} -${compress_fastq_level} -c";
 compress_fastq_igzip_cmd="igzip -${compress_fastq_igzip_level} -c";
 compress_fastq_gzip_cmd="gzip -${compress_fastq_level} -c";
+
+
+SEQC_RUN="seqc run -release";
+CODON_RUN="codon run -plugin seq -release";
+CODON_OR_SEQ_RUN="${CODON_OR_SEQ_RUN:-${CODON_RUN}}";
 
 
 
@@ -222,8 +227,7 @@ create_issaac_seq_barcode_fastq_for_star_solo () {
         close(read_fastq_R2_cmd);
         close(read_fastq_I2_cmd);
     }' \
-    | seqc run \
-        -release \
+    | ${CODON_OR_SEQ_RUN} \
         "${script_dir}/extract_and_correct_issaac_seq_barcode_from_fastq.seq" \
             "${hydrop_rna_bc_whitelist_filename}" \
             "/dev/stdin" \

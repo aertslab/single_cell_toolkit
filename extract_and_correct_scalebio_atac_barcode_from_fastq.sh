@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (C) 2020-2023 - Gert Hulselmans
+# Copyright (C) 2020-2024 - Gert Hulselmans
 #
 # Purpose:
 #   Read ScaleBio index 2 FASTQ file with raw barcode reads and correct them
@@ -16,6 +16,11 @@
 
 set -e
 set -o pipefail
+
+
+SEQC_RUN="seqc run -release";
+CODON_RUN="codon run -plugin seq -release";
+CODON_OR_SEQ_RUN="${CODON_OR_SEQ_RUN:-${CODON_RUN}}";
 
 
 
@@ -125,8 +130,7 @@ extract_and_correct_scalebio_atac_barcode_from_fastq () {
     local script_dir="$(cd $(dirname "${BASH_SOURCE}") && pwd)";
 
     # Correct tagmentation and 10x ATAC barcodes in index 2 FASTQ file:
-    seqc run \
-        -release \
+    ${CODON_OR_SEQ_RUN} \
         "${script_dir}/extract_and_correct_scalebio_atac_barcode_from_fastq.seq" \
             "${tenx_or_hydrop_atac_bc_whitelist_filename}" \
             "${tenx_or_hydrop}" \
