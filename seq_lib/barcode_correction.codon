@@ -394,26 +394,29 @@ def correct_bc_with_whitelist(
     (0, 1, 2 or 3) mismatches.
 
     """
-    max_hamming_distx = ~max_hamming_dist if max_hamming_dist else 3
-    max_hamming_distx = 3 if max_hamming_distx == -1 else max_hamming_distx
+    max_hamming_dist = (
+        3
+        if not max_hamming_dist or max_hamming_dist == -1
+        else max_hamming_dist
+    )
 
     if bc in bc_whitelist:
         # Exact match.
         return CorrectedBc(0, str(bc))
 
-    if max_hamming_distx >= 1:
+    if max_hamming_dist >= 1:
         for hamming_dist1_neighbor in hamming_dist1_neighbors(bc):
             if hamming_dist1_neighbor in bc_whitelist:
                 # Hamming neighbor in whitelist (distance = 1).
                 return CorrectedBc(1, str(hamming_dist1_neighbor))
 
-    if max_hamming_distx >= 2:
+    if max_hamming_dist >= 2:
         for hamming_dist2_neighbor in hamming_dist2_neighbors(bc):
             if hamming_dist2_neighbor in bc_whitelist:
                 # Hamming neighbor in whitelist (distance = 2).
                 return CorrectedBc(2, str(hamming_dist2_neighbor))
 
-    if max_hamming_distx >= 3:
+    if max_hamming_dist >= 3:
         for hamming_dist3_neighbor in hamming_dist3_neighbors(bc):
             if hamming_dist3_neighbor in bc_whitelist:
                 # Hamming neighbor in whitelist (distance = 3).
@@ -441,26 +444,29 @@ def correct_bc_by_qual_order_with_whitelist(
             "same length."
         )
 
-    max_hamming_distx = ~max_hamming_dist if max_hamming_dist else 3
-    max_hamming_distx = 3 if max_hamming_distx == -1 else max_hamming_distx
+    max_hamming_dist = (
+        3
+        if not max_hamming_dist or max_hamming_dist == -1
+        else max_hamming_dist
+    )
 
     if bc in bc_whitelist:
         # Exact match.
         return CorrectedBc(0, str(bc))
 
-    if max_hamming_distx >= 1:
+    if max_hamming_dist >= 1:
         for hamming_dist1_neighbor in hamming_dist1_neighbors_by_qual_order(bc, qual):
             if hamming_dist1_neighbor in bc_whitelist:
                 # Hamming neighbor in whitelist (distance = 1).
                 return CorrectedBc(1, str(hamming_dist1_neighbor))
 
-    if max_hamming_distx >= 2:
+    if max_hamming_dist >= 2:
         for hamming_dist2_neighbor in hamming_dist2_neighbors_by_qual_order(bc, qual):
             if hamming_dist2_neighbor in bc_whitelist:
                 # Hamming neighbor in whitelist (distance = 2).
                 return CorrectedBc(2, str(hamming_dist2_neighbor))
 
-    if max_hamming_distx >= 3:
+    if max_hamming_dist >= 3:
         for hamming_dist3_neighbor in hamming_dist3_neighbors_by_qual_order(bc, qual):
             if hamming_dist3_neighbor in bc_whitelist:
                 # Hamming neighbor in whitelist (distance = 3).
@@ -481,8 +487,11 @@ def correct_bc_with_Ns_with_whitelist(
     max_hamming_dist (0, 1, 2 or 3) mismatches (only Ns will be corrected).
 
     """
-    max_hamming_distx = ~max_hamming_dist if max_hamming_dist else 3
-    max_hamming_distx = 3 if max_hamming_distx == -1 else max_hamming_distx
+    max_hamming_dist = (
+        3
+        if not max_hamming_dist or max_hamming_dist == -1
+        else max_hamming_dist
+    )
 
     n_count = 0
     n_positions = List[int](capacity=len(bc_with_Ns))
@@ -492,7 +501,7 @@ def correct_bc_with_Ns_with_whitelist(
             n_count += 1
             n_positions.append(idx)
 
-    if n_count > max_hamming_distx:
+    if n_count > max_hamming_dist:
         # Do not try to correct barcode, if there are more Ns than max allowed hamming
         # distance.
         return None
