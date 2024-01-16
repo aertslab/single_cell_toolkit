@@ -323,7 +323,7 @@ def fragments_to_bw(
         for chrom, chrom_size in chrom_sizes.items():
             chrom_arrays[chrom] = np.zeros(chrom_size, dtype=np.uint32)
 
-        no_fragments = 0
+        n_fragments = 0
 
         print(f"Number of fragments: {fragments_df.height}")
         print("Split fragments df by chromosome")
@@ -339,10 +339,10 @@ def fragments_to_bw(
                 per_chrom_fragments_dfs[chrom].select(["Start", "End"]).to_numpy().T
             )
             chrom_arrays[chrom] = calculate_depth(chrom_sizes[chrom], starts, ends)
-            no_fragments += per_chrom_fragments_dfs[chrom].height
+            n_fragments += per_chrom_fragments_dfs[chrom].height
 
         # Calculate RPM scaling factor.
-        rpm_scaling_factor = no_fragments / 1_000_000.0
+        rpm_scaling_factor = n_fragments / 1_000_000.0
 
         print(
             "Compact depth array per chromosome (make ranges for consecutive the same values and remove zeros):"

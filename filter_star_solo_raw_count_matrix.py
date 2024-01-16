@@ -35,7 +35,7 @@ def read_mtx(matrix_mtx_filename):
                         f'"{matrix_mtx_filename}" is not in "MatrixMarket matrix coordinate integer general" format.'
                     )
             elif idx == 2:
-                no_features, no_barcodes, no_entries = (
+                n_features, n_barcodes, n_entries = (
                     int(x) for x in line.decode("utf-8").rstrip().split(" ")
                 )
                 break
@@ -50,13 +50,13 @@ def read_mtx(matrix_mtx_filename):
         dtypes={"feature_idx": pl.UInt32, "CB_idx_orig": pl.UInt32, "value": pl.UInt32},
     )
 
-    return matrix_mtx_df, no_features, no_barcodes, no_entries
+    return matrix_mtx_df, n_features, n_barcodes, n_entries
 
 
 def write_filtered_barcodes_and_matrix_mtx(
     cb_idx_orig_to_cb_df,
     matrix_mtx_df,
-    no_features,
+    n_features,
     barcodes_tsv_out_filename,
     mtx_out_filename,
 ):
@@ -118,7 +118,7 @@ def write_filtered_barcodes_and_matrix_mtx(
             # Number of features, CBs after filtering and non-zero elements in
             # sparse matrix.
             "{0:d} {1:d} {2:d}\n".format(
-                no_features,
+                n_features,
                 filtered_cb_idx_orig_to_cb_idx_new_df.height,
                 matrix_mtx_out_df.height,
             ).encode("utf-8")
@@ -230,7 +230,7 @@ def main():
 
     # Read MatrixMarket matrix file as Polars DataFrame and sparse matrix dimensions
     # (third line).
-    matrix_mtx_df, no_features, no_barcodes, no_entries = read_mtx(matrix_mtx_filename)
+    matrix_mtx_df, n_features, n_barcodes, n_entries = read_mtx(matrix_mtx_filename)
 
     #   - Filter CBs from barcodes TSV file, so only those that are available in
     #     at least once in the MatrixMarket matrix file are retained.
@@ -239,7 +239,7 @@ def main():
     write_filtered_barcodes_and_matrix_mtx(
         cb_idx_orig_to_cb_df,
         matrix_mtx_df,
-        no_features,
+        n_features,
         barcodes_tsv_out_filename,
         matrix_mtx_out_filename,
     )
