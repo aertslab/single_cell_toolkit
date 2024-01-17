@@ -92,6 +92,7 @@ def correct_tagmentation_and_10x_atac_bc_from_fastq(
     fastq_with_raw_bc_filename: str,
     corrected_bc_filename: str,
     corrected_bc_stats_tsv_filename: str,
+    correct_tagmentation_only: bool = False,
     bc_suffix: str = "1",
     max_hamming_dist: int = 1,
     min_frac_bcs_to_find: float = min_frac_bcs_to_find_default,
@@ -115,6 +116,9 @@ def correct_tagmentation_and_10x_atac_bc_from_fastq(
         and qualities and corrected barcode sequences.
     corrected_bc_stats_tsv_filename:
         File with barcode correction statistics.
+    correct_tagmentation_only:
+        Correct tagmentation barcode only. Useful if splitting ScaleBio ATAC FASTQ
+        files later per tagmentation barcode.
     bc_suffix:
         Barcode suffix to append to corrected barcode sequences. Default: "1".
     max_hamming_dist:
@@ -189,12 +193,18 @@ def correct_tagmentation_and_10x_atac_bc_from_fastq(
                 max_hamming_dist=max_hamming_dist,
             )
 
-            corrected_10x_bc = correct_bc_by_qual_order_with_whitelist_or_correct_bc_with_Ns_with_whitelist(
-                bc_whitelist=tenx_atac_bc_whitelist,
-                bc_length=16,
-                bc_seq=tenx_atac_bc_seq,
-                bc_qual=tenx_atac_bc_qual,
-                max_hamming_dist=max_hamming_dist,
+            corrected_10x_bc = (
+                correct_bc_by_qual_order_with_whitelist_or_correct_bc_with_Ns_with_whitelist(
+                    bc_whitelist=tenx_atac_bc_whitelist,
+                    bc_length=16,
+                    bc_seq=tenx_atac_bc_seq,
+                    bc_qual=tenx_atac_bc_qual,
+                    max_hamming_dist=max_hamming_dist,
+                )
+                if not correct_tagmentation_only
+                # Skip correcting 10x ATAC barcode if only tagmenation barcode
+                # correction was asked for.
+                else None
             )
 
             if corrected_tagmentation_bc:
@@ -205,37 +215,54 @@ def correct_tagmentation_and_10x_atac_bc_from_fastq(
             if corrected_10x_bc:
                 tenx_atac_bc_mismatches_stats[corrected_10x_bc.hamming_dist] += 1
 
-            if corrected_10x_bc and corrected_tagmentation_bc:
-                per_tagmentation_bc_and_with_10x_atac_bc_mismatches_stats[
-                    corrected_tagmentation_bc.corrected_bc
-                ][corrected_10x_bc.hamming_dist] += 1
-
-                # Write original FASTQ record name and raw cell barcode, raw cell
-                # barcode quality and corrected cell barcode:
-                #   - multiple cell barcode sequence strings should be concatenated
-                #     with dashes.
-                #   - multiple cell barcode quality strings should be concatenated
-                #     with spaces.
-                corrected_bc_fh.write(
-                    f"@{record.name} " +
-                    f"CR:Z:{tagmentation_bc_seq}-{tenx_atac_bc_seq}\t" +
-                    f"CY:Z:{tagmentation_bc_qual} {tenx_atac_bc_qual}\t" +
-                    f"CB:Z:{corrected_tagmentation_bc.corrected_bc}" +
-                    f"-{corrected_10x_bc.corrected_bc}" +
-                    f"{'-' + bc_suffix if bc_suffix else ''}\n"
-                )
+            if correct_tagmentation_only:
+                if corrected_tagmentation_bc:
+                    # When only tagmentation barcodes need to be corrected, write
+                    # write original FASTQ record name and raw 10x ATAC cell barcode,
+                    # raw 10x ATAC cell barcode quality and corrected tagmentation
+                    # barcode.
+                    corrected_bc_fh.write(
+                        f"@{record.name} " +
+                        f"cr:Z:{~tenx_atac_bc_seq if is_bc_rev else tenx_atac_bc_seq}\t" +
+                        f"cy:Z:{tenx_atac_bc_qual[::-1] if is_bc_rev else tenx_atac_bc_qual}\t" +
+                        f"tb:Z:{corrected_tagmentation_bc.corrected_bc}\n"
+                    )
+                else:
+                    # Only write original FASTQ record name when tagmentation barcode
+                    # could not be corrected.
+                    corrected_bc_fh.write(f"@{record.name}\n")
             else:
-                # Write original FASTQ record name and raw cell barcode and raw cell
-                # barcode quality:
-                #   - multiple cell barcode sequence strings should be concatenated
-                #     with dashes.
-                #   - multiple cell barcode quality strings should be concatenated
-                #     with spaces.
-                corrected_bc_fh.write(
-                    f"@{record.name} " +
-                    f"CR:Z:{tagmentation_bc_seq}-{tenx_atac_bc_seq}\t" +
-                    f"CY:Z:{tagmentation_bc_qual} {tenx_atac_bc_qual}\n"
-                )
+                if corrected_10x_bc and corrected_tagmentation_bc:
+                    per_tagmentation_bc_and_with_10x_atac_bc_mismatches_stats[
+                        corrected_tagmentation_bc.corrected_bc
+                    ][corrected_10x_bc.hamming_dist] += 1
+
+                    # Write original FASTQ record name and raw cell barcode, raw cell
+                    # barcode quality and corrected cell barcode:
+                    #   - multiple cell barcode sequence strings should be concatenated
+                    #     with dashes.
+                    #   - multiple cell barcode quality strings should be concatenated
+                    #     with spaces.
+                    corrected_bc_fh.write(
+                        f"@{record.name} " +
+                        f"CR:Z:{tagmentation_bc_seq}-{tenx_atac_bc_seq}\t" +
+                        f"CY:Z:{tagmentation_bc_qual} {tenx_atac_bc_qual}\t" +
+                        f"CB:Z:{corrected_tagmentation_bc.corrected_bc}" +
+                        f"-{corrected_10x_bc.corrected_bc}" +
+                        f"{'-' + bc_suffix if bc_suffix else ''}\n"
+                    )
+                else:
+                    # Write original FASTQ record name and raw cell barcode and raw
+                    # cell barcode quality:
+                    #   - multiple cell barcode sequence strings should be concatenated
+                    #     with dashes.
+                    #   - multiple cell barcode quality strings should be concatenated
+                    #     with spaces.
+                    corrected_bc_fh.write(
+                        f"@{record.name} " +
+                        f"CR:Z:{tagmentation_bc_seq}-{tenx_atac_bc_seq}\t" +
+                        f"CY:Z:{tagmentation_bc_qual} {tenx_atac_bc_qual}\n"
+                    )
 
     # Calculate number of tagmentation barcodes found per tagmentation barcode.
     per_tagmentation_bc_reads = {
@@ -315,12 +342,17 @@ def correct_tagmentation_and_10x_atac_bc_from_fastq(
 
             corrected_bc_stats_tsv_fh.write("\n")
 
-    # Calculate fraction of reads which have both a tagmentation barcode
-    # and a 10x ATAC barcode.
-    frac_bcs_found = tagmentation_bc_and_10x_atac_bc_reads / total_reads
+    # Calculate fraction of reads which could be corrected.
+    frac_bcs_found = (
+        # % of reads for which tagmentation barcode could be corrected.
+        tagmentation_bc_reads / total_reads
+        if correct_tagmentation_only
+        # % of reads for which both a tagmentation barcode and 10x ATAC barcode could
+        # be corrected.
+        else tagmentation_bc_and_10x_atac_bc_reads / total_reads
+    )
 
-    # Are there enough reads that have both a tagmentation barcode
-    # and a 10x ATAC barcode.
+    # Are there enough reads that could be corrected?
     enough_bcs_found = (frac_bcs_found >= min_frac_bcs_to_find)
 
     return enough_bcs_found, frac_bcs_found
@@ -333,6 +365,7 @@ def correct_tagmentation_and_hydrop_atac_bc_from_fastq(
     fastq_with_raw_bc_filename: str,
     corrected_bc_filename: str,
     corrected_bc_stats_tsv_filename: str,
+    correct_tagmentation_only: bool = False,
     bc_suffix: str = "1",
     max_hamming_dist: int = 1,
     min_frac_bcs_to_find: float = min_frac_bcs_to_find_default,
@@ -356,6 +389,9 @@ def correct_tagmentation_and_hydrop_atac_bc_from_fastq(
         sequences and qualities and corrected barcode sequences.
     corrected_bc_stats_tsv_filename:
         File with barcode correction statistics.
+    correct_tagmentation_only:
+        Correct tagmentation barcode only. Useful if splitting ScaleBio ATAC FASTQ
+        files later per tagmentation barcode.
     bc_suffix:
         Barcode suffix to append to corrected barcode sequences. Default: "1".
     max_hamming_dist:
@@ -429,12 +465,19 @@ def correct_tagmentation_and_hydrop_atac_bc_from_fastq(
                 max_hamming_dist=max_hamming_dist,
             )
 
-            corrected_hydrop_atac_bc = correct_bc_by_qual_order_with_whitelist_or_correct_bc_with_Ns_with_whitelist(
-                bc_whitelist=hydrop_atac_full_bc_whitelist,
-                bc_length=30,
-                bc_seq=hydrop_atac_bc_seq,
-                bc_qual=hydrop_atac_bc_qual,
-                max_hamming_dist=0,
+            corrected_hydrop_atac_bc = (
+                # Check for exact HyDrop ATAC barcode match with whitelist.
+                correct_bc_by_qual_order_with_whitelist_or_correct_bc_with_Ns_with_whitelist(
+                    bc_whitelist=hydrop_atac_full_bc_whitelist,
+                    bc_length=30,
+                    bc_seq=hydrop_atac_bc_seq,
+                    bc_qual=hydrop_atac_bc_qual,
+                    max_hamming_dist=0,
+                )
+                if not correct_tagmentation_only
+                # Skip correcting HyDrop ATAC barcode if only tagmenation barcode
+                # correction was asked for.
+                else None
             )
 
             if corrected_tagmentation_bc:
@@ -442,7 +485,11 @@ def correct_tagmentation_and_hydrop_atac_bc_from_fastq(
                     corrected_tagmentation_bc.hamming_dist
                 ] += 1
 
-            if corrected_hydrop_atac_bc:
+            if correct_tagmentation_only:
+                # Skip correcting HyDrop ATAC barcode with mismatched, if only
+                # tagmenation barcode correction was asked for.
+                corrected_hydrop_atac_bc = None
+            elif corrected_hydrop_atac_bc:
                 hydrop_atac_bc_mismatches_stats[corrected_hydrop_atac_bc.hamming_dist] += 1
 
                 corrected_hydrop_atac_bc_seq_str = corrected_hydrop_atac_bc.corrected_bc
@@ -490,37 +537,54 @@ def correct_tagmentation_and_hydrop_atac_bc_from_fastq(
                 else:
                     corrected_hydrop_atac_bc = None
 
-            if corrected_hydrop_atac_bc and corrected_tagmentation_bc:
-                per_tagmentation_bc_and_with_hydrop_atac_bc_mismatches_stats[
-                    corrected_tagmentation_bc.corrected_bc
-                ][corrected_hydrop_atac_bc.hamming_dist] += 1
-
-                # Write original FASTQ record name and raw cell barcode, raw cell
-                # barcode quality and corrected cell barcode:
-                #   - multiple cell barcode sequence strings should be concatenated
-                #     with dashes.
-                #   - multiple cell barcode quality strings should be concatenated
-                #     with spaces.
-                corrected_bc_fh.write(
-                    f"@{record.name} " +
-                    f"CR:Z:{tagmentation_bc_seq}-{hydrop_atac_bc_seq}\t" +
-                    f"CY:Z:{tagmentation_bc_qual} {hydrop_atac_bc_qual}\t" +
-                    f"CB:Z:{corrected_tagmentation_bc.corrected_bc}" +
-                    f"-{corrected_hydrop_atac_bc.corrected_bc}" +
-                    f"{'-' + bc_suffix if bc_suffix else ''}\n"
-                )
+            if correct_tagmentation_only:
+                if corrected_tagmentation_bc:
+                    # When only tagmentation barcodes need to be corrected, write
+                    # write original FASTQ record name and raw HyDrop ATAC cell
+                    # barcode, raw HyDrop ATAC cell barcode quality and corrected
+                    # tagmentation barcode.
+                    corrected_bc_fh.write(
+                        f"@{record.name} " +
+                        f"cr:Z:{~hydrop_atac_bc_seq if is_bc_rev else hydrop_atac_bc_seq}\t" +
+                        f"cy:Z:{hydrop_atac_bc_qual[::-1] if is_bc_rev else hydrop_atac_bc_qual}\t" +
+                        f"tb:Z:{corrected_tagmentation_bc.corrected_bc}\n"
+                    )
+                else:
+                    # Only write original FASTQ record name when tagmentation barcode
+                    # could not be corrected.
+                    corrected_bc_fh.write(f"@{record.name}\n")
             else:
-                # Write original FASTQ record name and raw cell barcode and raw cell
-                # barcode quality:
-                #   - multiple cell barcode sequence strings should be concatenated
-                #     with dashes.
-                #   - multiple cell barcode quality strings should be concatenated
-                #     with spaces.
-                corrected_bc_fh.write(
-                    f"@{record.name} " +
-                    f"CR:Z:{tagmentation_bc_seq}-{hydrop_atac_bc_seq}\t" +
-                    f"CY:Z:{tagmentation_bc_qual} {hydrop_atac_bc_qual}\n"
-                )
+                if corrected_hydrop_atac_bc and corrected_tagmentation_bc:
+                    per_tagmentation_bc_and_with_hydrop_atac_bc_mismatches_stats[
+                        corrected_tagmentation_bc.corrected_bc
+                    ][corrected_hydrop_atac_bc.hamming_dist] += 1
+
+                    # Write original FASTQ record name and raw cell barcode, raw cell
+                    # barcode quality and corrected cell barcode:
+                    #   - multiple cell barcode sequence strings should be concatenated
+                    #     with dashes.
+                    #   - multiple cell barcode quality strings should be concatenated
+                    #     with spaces.
+                    corrected_bc_fh.write(
+                        f"@{record.name} " +
+                        f"CR:Z:{tagmentation_bc_seq}-{hydrop_atac_bc_seq}\t" +
+                        f"CY:Z:{tagmentation_bc_qual} {hydrop_atac_bc_qual}\t" +
+                        f"CB:Z:{corrected_tagmentation_bc.corrected_bc}" +
+                        f"-{corrected_hydrop_atac_bc.corrected_bc}" +
+                        f"{'-' + bc_suffix if bc_suffix else ''}\n"
+                    )
+                else:
+                    # Write original FASTQ record name and raw cell barcode and raw cell
+                    # barcode quality:
+                    #   - multiple cell barcode sequence strings should be concatenated
+                    #     with dashes.
+                    #   - multiple cell barcode quality strings should be concatenated
+                    #     with spaces.
+                    corrected_bc_fh.write(
+                        f"@{record.name} " +
+                        f"CR:Z:{tagmentation_bc_seq}-{hydrop_atac_bc_seq}\t" +
+                        f"CY:Z:{tagmentation_bc_qual} {hydrop_atac_bc_qual}\n"
+                    )
 
     # Calculate number of tagmentation barcodes found per tagmentation barcode.
     per_tagmentation_bc_reads = {
@@ -619,23 +683,28 @@ def correct_tagmentation_and_hydrop_atac_bc_from_fastq(
 
             corrected_bc_stats_tsv_fh.write("\n")
 
-    # Calculate fraction of reads which have both a tagmentation barcode
-    # and a HyDrop ATAC barcode.
-    frac_bcs_found = tagmentation_bc_and_hydrop_atac_bc_reads / total_reads
+    # Calculate fraction of reads which could be corrected.
+    frac_bcs_found = (
+        # % of reads for which tagmentation barcode could be corrected.
+        tagmentation_bc_reads / total_reads
+        if correct_tagmentation_only
+        # % of reads for which both a tagmentation barcode and HyDrop ATAC barcode
+        # could be corrected.
+        else tagmentation_bc_and_hydrop_atac_bc_reads / total_reads
+    )
 
-    # Are there enough reads that have both a tagmentation barcode
-    # and a HyDrop ATAC barcode.
+    # Are there enough reads that could be corrected?
     enough_bcs_found = (frac_bcs_found >= min_frac_bcs_to_find)
 
     return enough_bcs_found, frac_bcs_found
 
 
 def main():
-    if len(sys.argv) < 9:
+    if len(sys.argv) < 10 or len(sys.argv) > 11:
         print(
             f"Usage: seqc run -release {sys.argv[0]} " +
             "tenx_or_hydrop_atac_bc_whitelist_filename tenx_or_hydrop fastq_with_raw_bc_file corrected_bc_file " +
-            "corrected_bc_stats_file scalebio_bc_type bc_suffix max_mismatches [min_frac_bcs_to_find]",
+            "corrected_bc_stats_file scalebio_bc_type correct_tagmentation_only bc_suffix max_mismatches [min_frac_bcs_to_find]",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -646,9 +715,10 @@ def main():
         corrected_bc_filename = sys.argv[4]
         corrected_bc_stats_tsv_filename = sys.argv[5]
         scalebio_bc_type = sys.argv[6].lower()
-        bc_suffix = sys.argv[7]
-        max_mismatches = int(sys.argv[8])
-        min_frac_bcs_to_find = float(sys.argv[9]) if len(sys.argv) == 10 else min_frac_bcs_to_find_default
+        correct_tagmentation_only = sys.argv[7].lower() == "true"
+        bc_suffix = sys.argv[8]
+        max_mismatches = int(sys.argv[9])
+        min_frac_bcs_to_find = float(sys.argv[10]) if len(sys.argv) == 11 else min_frac_bcs_to_find_default
 
         tagmentation_bc_whitelist: set[Kmer[8]]
 
@@ -694,6 +764,7 @@ def main():
                 fastq_with_raw_bc_filename=fastq_with_raw_bc_filename,
                 corrected_bc_filename=corrected_bc_filename,
                 corrected_bc_stats_tsv_filename=corrected_bc_stats_tsv_filename,
+                correct_tagmentation_only=correct_tagmentation_only,
                 bc_suffix=bc_suffix,
                 max_hamming_dist=max_mismatches,
                 min_frac_bcs_to_find=min_frac_bcs_to_find,
@@ -728,6 +799,8 @@ def main():
                 fastq_with_raw_bc_filename=fastq_with_raw_bc_filename,
                 corrected_bc_filename=corrected_bc_filename,
                 corrected_bc_stats_tsv_filename=corrected_bc_stats_tsv_filename,
+                correct_tagmentation_only=correct_tagmentation_only,
+                bc_suffix=bc_suffix,
                 max_hamming_dist=max_mismatches,
                 min_frac_bcs_to_find=min_frac_bcs_to_find,
             )

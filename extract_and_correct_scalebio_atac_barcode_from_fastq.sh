@@ -29,25 +29,34 @@ extract_and_correct_scalebio_atac_barcode_from_fastq () {
     local fastq_with_raw_bc_filename="${2}";
     local corrected_bc_filename="${3}";
     local scalebio_bc_type="${4}";
-    local bc_suffix="${5:-1}";
-    local max_mismatches="${6:-1}";
-    local min_frac_bcs_to_find="${7:-0.5}";
+    local correct_tagmentation_only="${5:-false}";
+    local bc_suffix="${6:-1}";
+    local max_mismatches="${7:-1}";
+    local min_frac_bcs_to_find="${8:-0.5}";
 
     if [ ${#@} -lt 4 ] ; then
         printf 'Usage:\n';
         printf '    extract_and_correct_scalebio_atac_barcode_from_fastq \\\n';
         printf '        10x_or_hydrop_atac_bc_whitelist_file fastq_with_raw_bc_file corrected_bc_file \\\n';
-        printf '        scalebio_bc_type [bc_suffix] [max_mismatches] [min_frac_bcs_to_find]\n\n';
+        printf '        scalebio_bc_type [correct_tagmentation_only] [bc_suffix] [max_mismatches] \\\n';
+        printf '        [min_frac_bcs_to_find]\n\n';
         printf 'Purpose:\n';
         printf '    Read ScaleBio index 2 FASTQ file with raw barcode reads and correct them\n';
         printf '    according to the provided whitelist.\n\n';
-        printf '    For each FASTQ record, return:\n';
+        printf '    If correct_tagmentation_only="false", return for each FASTQ record:\n';
         printf '      - read name\n';
         printf '      - raw barcode sequences (CR:Z:tagmentation_bc_seq-10x_or_hydrop_atac_bc_seq)\n';
         printf '      - raw barcode qualities (CY:Z:tagmentation_bc_qual 10x_or_hydrop_atac_bc_qual)\n';
         printf '      - corrected barcode sequences\n';
         printf '        (CB:z:corrected_tagmentation_bc-corrected_10x_or_hydrop_atac_bc-bc_suffix)\n';
         printf '        (if raw barcode sequences were both correctable.)\n\n';
+        printf '    If correct_tagmentation_only="true", return for each FASTQ record:\n';
+        printf '      - read name\n';
+        printf '      - if tagmentation barcode was correctable:\n';
+        printf '        - raw 10x or HyDrop ATAC barcode sequences (cr:Z:10x_or_hydrop_atac_bc_seq)\n';
+        printf '        - raw 10x or HyDrop ATAC barcode qualities (cy:Z:10x_or_hydrop_atac_bc_qual)\n';
+        printf '        - corrected tagmentation barcode sequences\n';
+        printf '          (tb:z:corrected_tagmentation_bc)\n\n';
         printf 'Arguments:\n';
         printf '    10x_or_hydrop_atac_bc_whitelist_file:\n';
         printf '        File with 10x or HyDrop ATAC barcode whitelist to use to correct raw\n';
@@ -63,6 +72,10 @@ extract_and_correct_scalebio_atac_barcode_from_fastq () {
         printf '        ScaleBio tagmentation barcode type set to look for:\n';
         printf '        "scalebio" (original ScaleBio), "scalebioih" (ScaleBio inhouse),\n';
         printf '        "scalebioih6" (ScaleBio inhouse trial) and "all".\n';
+        printf '    correct_tagmentation_only:\n';
+        printf '        Correct tagmentation barcode only. Useful if splitting ScaleBio ATAC FASTQ\n';
+        printf '        files later per tagmentation barcode.\n';
+        printf '        Default: "false"\n':
         printf '    bc_suffix:\n';
         printf '        Barcode suffix to add after corrected barcode sequence.\n';
         printf '        Default: "1"\n';
@@ -141,7 +154,8 @@ extract_and_correct_scalebio_atac_barcode_from_fastq () {
     # Get script dir.
     local script_dir="$(cd $(dirname "${BASH_SOURCE}") && pwd)";
 
-    # Correct tagmentation and 10x ATAC barcodes in index 2 FASTQ file:
+    # Correct tagmentation and 10x/HyDrop ATAC barcodes in index 2 FASTQ file
+    # (or correct only tagmentation barcode if correct_tagmentation_only="true").
     ${CODON_OR_SEQ_RUN} \
         "${script_dir}/extract_and_correct_scalebio_atac_barcode_from_fastq.seq" \
             "${tenx_or_hydrop_atac_bc_whitelist_filename}" \
@@ -150,6 +164,7 @@ extract_and_correct_scalebio_atac_barcode_from_fastq () {
             "/dev/stdout" \
             "${corrected_bc_filename%.zst}.corrected_bc_stats.tsv" \
             "${scalebio_bc_type}" \
+            "${correct_tagmentation_only}" \
             "${bc_suffix}" \
             "${max_mismatches}" \
             "${min_frac_bcs_to_find}" \
