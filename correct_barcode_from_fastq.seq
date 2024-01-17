@@ -82,7 +82,7 @@ def correct_bc_from_fastq(
 
             # Get barcode sequence and associated quality from FASTQ record
             # reverse complemented if needed based on the sequencer.
-            bc_seq, bc_qual = get_seq_and_qual_barcode_read(
+            bc_seq, bc_qual, _is_bc_rev = get_seq_and_qual_barcode_read(
                 fastq_record=record,
                 seq_start=0,
                 seq_end=bc_length,

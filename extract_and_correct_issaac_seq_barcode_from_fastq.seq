@@ -74,7 +74,8 @@ def correct_issaac_seq_barcode_from_fastq(
 
             # Extract HyDrop RNA barcode sequence and quality.
             (hydrop_rna_bc_seq,
-             hydrop_rna_bc_qual
+             hydrop_rna_bc_qual,
+             _is_bc_rev,
              ) = get_seq_and_qual_barcode_read(
                 fastq_record=record,
                 seq_start=0,
@@ -85,7 +86,8 @@ def correct_issaac_seq_barcode_from_fastq(
 
             # Extract UMI sequence and quality.
             (umi_seq,
-             umi_qual
+             umi_qual,
+             _is_bc_rev,
              ) = get_seq_and_qual_barcode_read(
                 fastq_record=record,
                 seq_start=30,

@@ -70,11 +70,11 @@ def get_seq_and_qual_barcode_read(
     seq_start: int,
     seq_end: int,
     auto_reverse_comp: bool = True,
-) -> Tuple[bio.seq, str]:
+) -> Tuple[bio.seq, str, bool]:
     """
     Get sequence and associated quality scores from the current FASTQ record,
     for the provided seq_start and seq_end values, reverse complemented if
-    needed based on the sequencer used.
+    needed based on the sequencer used and reverse complement status.
 
     Parameters
     ----------
@@ -90,19 +90,19 @@ def get_seq_and_qual_barcode_read(
 
     Returns
     -------
-    seq, qual:
+    seq, qual, is_bc_rev:
         Sub sequence of original FASTQ record and associated quality score,
-        reverse complemented if needed based on the sequencer used.
+        reverse complemented if needed based on the sequencer used and
+        reverse complement status.
 
     """
     seq: bio.seq
     qual: str
+    is_bc_rev: bool = False
 
     if auto_reverse_comp:
         # Get sequencing machine ID from FASTQ read name (part before first colon).
         sequencing_machine_id = fastq_record.name[0:fastq_record.name.index(":")]
-
-        is_bc_rev: bool
 
         # Check if the reverse complement for the barcode sequence needs to be generated
         # based on the sequencing machine ID. Check if the sequencing machine ID is in
@@ -130,4 +130,4 @@ def get_seq_and_qual_barcode_read(
             f"{seq_end - seq_start}."
         )
 
-    return seq, qual
+    return seq, qual, is_bc_rev

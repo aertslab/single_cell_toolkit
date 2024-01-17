@@ -165,7 +165,8 @@ def correct_tagmentation_and_10x_atac_bc_from_fastq(
             # Get tagmentation + 10x ATAC sequence and associated quality from FASTQ
             # record, reverse complemented if needed based on the sequencer.
             (tagmentation_and_10x_atac_bc_seq,
-             tagmentation_and_10x_atac_bc_qual
+             tagmentation_and_10x_atac_bc_qual,
+             is_bc_rev,
              ) = get_seq_and_qual_barcode_read(
                 fastq_record=record,
                 seq_start=0,
@@ -404,7 +405,8 @@ def correct_tagmentation_and_hydrop_atac_bc_from_fastq(
             # Get tagmentation + HyDrop ATAC sequence and associated quality from FASTQ
             # record, reverse complemented if needed based on the sequencer.
             (tagmentation_and_hydrop_atac_bc_seq,
-             tagmentation_and_hydrop_atac_bc_qual
+             tagmentation_and_hydrop_atac_bc_qual,
+             is_bc_rev,
              ) = get_seq_and_qual_barcode_read(
                 fastq_record=record,
                 seq_start=0,

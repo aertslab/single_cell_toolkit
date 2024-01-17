@@ -191,7 +191,8 @@ def correct_reverse_transcription_and_10x_atac_bc_from_fastq(
 
             # Extract reverse transcription barcode sequence and quality.
             (reverse_transcription_bc_seq,
-             reverse_transcription_bc_qual
+             reverse_transcription_bc_qual,
+             _is_bc_rev,
              ) = get_seq_and_qual_barcode_read(
                 fastq_record=record,
                 seq_start=0,
@@ -201,7 +202,8 @@ def correct_reverse_transcription_and_10x_atac_bc_from_fastq(
 
             # Extract 10x ATAC barcode sequence and quality.
             (tenx_atac_bc_seq,
-             tenx_atac_bc_qual
+             tenx_atac_bc_qual,
+             _is_bc_rev,
              ) = get_seq_and_qual_barcode_read(
                 fastq_record=record,
                 seq_start=13,
@@ -212,7 +214,8 @@ def correct_reverse_transcription_and_10x_atac_bc_from_fastq(
 
             # Extract UMI sequence and quality.
             (umi_seq,
-             umi_qual
+             umi_qual,
+             _is_bc_rev,
              ) = get_seq_and_qual_barcode_read(
                 fastq_record=record,
                 seq_start=29,
