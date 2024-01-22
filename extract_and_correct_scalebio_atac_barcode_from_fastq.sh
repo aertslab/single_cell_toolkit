@@ -75,7 +75,7 @@ extract_and_correct_scalebio_atac_barcode_from_fastq () {
         printf '    correct_tagmentation_only:\n';
         printf '        Correct tagmentation barcode only. Useful if splitting ScaleBio ATAC FASTQ\n';
         printf '        files later per tagmentation barcode.\n';
-        printf '        Default: "false"\n':
+        printf '        Default: "false"\n';
         printf '    bc_suffix:\n';
         printf '        Barcode suffix to add after corrected barcode sequence.\n';
         printf '        Default: "1"\n';
