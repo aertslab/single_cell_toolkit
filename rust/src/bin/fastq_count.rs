@@ -7,7 +7,7 @@ use std::path::PathBuf;
 fn count_nbr_reads(fastq_filename: &Path) -> u64 {
     let mut nbr_reads: u64 = 0;
 
-    let mut fastq_reader = parse_fastx_file(&fastq_filename)
+    let mut fastq_reader = parse_fastx_file(fastq_filename)
         .unwrap_or_else(|_| panic!("Invalid FASTQ file \"{}\"", fastq_filename.display()));
 
     while let Some(_fastq_record) = fastq_reader.next() {
@@ -27,7 +27,7 @@ fn main() {
         // Only keep FASTQ files ("*.fastq", "*.fq", "*.fastq.gz", "*.fq.gz") from command line arguments.
         let fastq_file_names: Vec<_> = env::args()
             .skip(1)
-            .map(|fastq_file_name| PathBuf::from(&fastq_file_name))
+            .map(PathBuf::from)
             .filter_map(|fastq_file_path| {
                 // Filter out files without extension.
                 let fastq_ext = fastq_file_path.extension()?.to_str()?;
@@ -55,8 +55,6 @@ fn main() {
                 }
             })
             .collect();
-
-        //        println!("{:?}", &fastq_file_names);
 
         // Count number of reads in each FASTQ file.
         fastq_file_names

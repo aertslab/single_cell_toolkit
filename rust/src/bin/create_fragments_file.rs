@@ -1,10 +1,8 @@
 use bio_types::genome::AbstractInterval;
-use grep_cli;
 use itertools::Itertools;
 use rust_htslib::bam::{record::Aux, Read, Reader};
 use termcolor::ColorChoice;
 
-use itoa;
 use std::env;
 use std::io::Write;
 use std::process;
@@ -23,26 +21,26 @@ fn write_fragment(
     fragment: &Fragment,
     fragment_count: usize,
 ) {
-    stdout.write(fragment.chromosome.as_bytes()).unwrap();
-    stdout.write(b"\t").unwrap();
+    stdout.write_all(fragment.chromosome.as_bytes()).unwrap();
+    stdout.write_all(b"\t").unwrap();
 
     // Convert start, end of fragments and fragment count fast from integers
     // to strings with itoa.
     let mut itoa_buffer = itoa::Buffer::new();
     let fragment_start_str = itoa_buffer.format(fragment.start);
-    stdout.write(fragment_start_str.as_bytes()).unwrap();
-    stdout.write(b"\t").unwrap();
+    stdout.write_all(fragment_start_str.as_bytes()).unwrap();
+    stdout.write_all(b"\t").unwrap();
 
     let fragment_end_str = itoa_buffer.format(fragment.end);
-    stdout.write(fragment_end_str.as_bytes()).unwrap();
-    stdout.write(b"\t").unwrap();
+    stdout.write_all(fragment_end_str.as_bytes()).unwrap();
+    stdout.write_all(b"\t").unwrap();
 
-    stdout.write(fragment.cb.as_bytes()).unwrap();
-    stdout.write(b"\t").unwrap();
+    stdout.write_all(fragment.cb.as_bytes()).unwrap();
+    stdout.write_all(b"\t").unwrap();
 
     let fragment_count_str = itoa_buffer.format(fragment_count);
-    stdout.write(fragment_count_str.as_bytes()).unwrap();
-    stdout.write(b"\n").unwrap();
+    stdout.write_all(fragment_count_str.as_bytes()).unwrap();
+    stdout.write_all(b"\n").unwrap();
 }
 
 fn create_fragments_file(input_bam_filename: &str) {
@@ -84,7 +82,7 @@ fn create_fragments_file(input_bam_filename: &str) {
                 let mate_mapq = match mate_mapq_aux {
                     Aux::I8(mate_mapq) => mate_mapq as i32,
                     Aux::I16(mate_mapq) => mate_mapq as i32,
-                    Aux::I32(mate_mapq) => mate_mapq as i32,
+                    Aux::I32(mate_mapq) => mate_mapq,
                     Aux::U8(mate_mapq) => mate_mapq as i32,
                     Aux::U16(mate_mapq) => mate_mapq as i32,
                     Aux::U32(mate_mapq) => mate_mapq as i32,
@@ -125,43 +123,40 @@ fn create_fragments_file(input_bam_filename: &str) {
                                 stdout.flush().unwrap();
                                 last_line_flush = 0;
 
-
                                 // Set new last chromosome and start position for the next iteration.
                                 last_contig = Some(fragment.chromosome.clone());
                                 last_start = Some(fragment.start);
                                 fragments.clear();
-                            } else {
-                                if let Some(last_start_unwrapped) = last_start {
-                                    if last_start_unwrapped != fragment.start {
-                                        // Current fragment is located on the same
-                                        // chromosome than the fragments collected
-                                        // in `fragments`, but the start coordinate
-                                        // is different.
+                            } else if let Some(last_start_unwrapped) = last_start {
+                                if last_start_unwrapped != fragment.start {
+                                    // Current fragment is located on the same
+                                    // chromosome than the fragments collected
+                                    // in `fragments`, but the start coordinate
+                                    // is different.
 
-                                        fragments.sort();
+                                    fragments.sort();
 
-                                        // Write previous collected fragments with same
-                                        // chromosome and start position.
-                                        for (fragment_count, fragment) in
-                                            fragments.iter().dedup_with_count()
-                                        {
-                                            write_fragment(&mut stdout, fragment, fragment_count);
+                                    // Write previous collected fragments with same
+                                    // chromosome and start position.
+                                    for (fragment_count, fragment) in
+                                        fragments.iter().dedup_with_count()
+                                    {
+                                        write_fragment(&mut stdout, fragment, fragment_count);
 
-                                            last_line_flush += 1;
-                                        }
-
-                                        // Flush stdout only if more than 50 lines were
-                                        // printed as calling it after every new line
-                                        // has a high overhead.
-                                        if last_line_flush > 50 {
-                                            stdout.flush().unwrap();
-                                            last_line_flush = 0;
-                                        }
-
-                                        // Set new start position for the next iteration.
-                                        last_start = Some(fragment.start);
-                                        fragments.clear();
+                                        last_line_flush += 1;
                                     }
+
+                                    // Flush stdout only if more than 50 lines were
+                                    // printed as calling it after every new line
+                                    // has a high overhead.
+                                    if last_line_flush > 50 {
+                                        stdout.flush().unwrap();
+                                        last_line_flush = 0;
+                                    }
+
+                                    // Set new start position for the next iteration.
+                                    last_start = Some(fragment.start);
+                                    fragments.clear();
                                 }
                             }
                         } else {

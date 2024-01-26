@@ -16,16 +16,16 @@ use serde::Deserialize;
 struct ParseBioCellMetadataRecord {
     bc_wells: String,
     sample: String,
-    species: String,
-    gene_count: u32,
-    tscp_count: u32,
-    mread_count: u32,
-    bc1_well: String,
-    bc2_well: String,
-    bc3_well: String,
-    bc1_wind: u8,
-    bc2_wind: u8,
-    bc3_wind: u8,
+    _species: String,
+    _gene_count: u32,
+    _tscp_count: u32,
+    _mread_count: u32,
+    _bc1_well: String,
+    _bc2_well: String,
+    _bc3_well: String,
+    _bc1_wind: u8,
+    _bc2_wind: u8,
+    _bc3_wind: u8,
 }
 
 // ParseBio sublibrary to BAM file CSV file record.
@@ -120,7 +120,7 @@ fn filter_bam_header(header: &Header, sublibrary: &str) -> Vec<u8> {
         .to_bytes()
         .split(|x| x == &b'\n')
         .filter(|x| !x.is_empty() && !x.starts_with(b"@HD\t") && !x.starts_with(b"@SQ\t"))
-        .map(|x| Vec::<u8>::from(x))
+        .map(Vec::<u8>::from)
         .map(|x| match x.starts_with(b"@PG\tID:STAR") {
             true => {
                 let mut pg_line = Vec::<u8>::from(&x[..11]);
@@ -128,7 +128,7 @@ fn filter_bam_header(header: &Header, sublibrary: &str) -> Vec<u8> {
                 pg_line.extend(Vec::<u8>::from(&x[11..]));
                 pg_line
             }
-            false => Vec::<u8>::from(x),
+            false => x,
         })
         .collect::<Vec<Vec<u8>>>()
         .join(&b"\n"[..])
@@ -201,8 +201,8 @@ fn parsebio_samples_bam(
         .unwrap();
 
         output_bam_writer
-            .set_thread_pool(&bam_thread_pool.as_ref().unwrap())
-            .expect("Failed to set number of BAM reading threads to 20.");
+            .set_thread_pool(bam_thread_pool.as_ref().unwrap())
+            .expect("Failed to set number of BAM reading threads to 16.");
         sample_to_bam_writer_mapping
             .entry(sample.to_owned())
             .or_insert(output_bam_writer);
@@ -217,8 +217,8 @@ fn parsebio_samples_bam(
         .unwrap();
 
         input_bam
-            .set_thread_pool(&bam_thread_pool.as_ref().unwrap())
-            .expect("Failed to set number of BAM reading threads to 20.");
+            .set_thread_pool(bam_thread_pool.as_ref().unwrap())
+            .expect("Failed to set number of BAM reading threads to 16.");
 
         for r in input_bam.records() {
             let mut record = r.unwrap();
@@ -285,7 +285,7 @@ fn main() {
     parsebio_samples_bam(
         &barcode_to_sample_mapping,
         &sublibrary_to_bam_mapping,
-        &output_prefix,
+        output_prefix,
         &cmd_line_str,
     );
 }
