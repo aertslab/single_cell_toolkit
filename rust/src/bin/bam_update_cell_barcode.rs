@@ -1,14 +1,60 @@
-use std::env;
 use std::error::Error;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process;
 
 use std::collections::HashMap;
+
+use clap::Parser;
 
 use rust_htslib::bam::{record::Aux, Format, Header, Read, Reader, Writer};
 
 // This lets us write `#[derive(Deserialize)]`.
 use serde::Deserialize;
+
+#[derive(Parser, Debug)]
+#[command(author, version, long_about = None)]
+#[command(name = "bam_update_cell_barcode")]
+#[command(about = "Update cell barcodes in a BAM file.")]
+struct Cli {
+    #[arg(
+        short = 'i',
+        required = true,
+        help = "Input BAM file.",
+        long_help = "Input BAM file."
+    )]
+    input_bam_path: PathBuf,
+    #[arg(
+        short = 'o',
+        required = true,
+        help = "Output BAM file.",
+        long_help = "Output BAM file in which old cell barcodes are replaced with new cell barcodes."
+    )]
+    output_bam_path: PathBuf,
+    #[arg(
+        short = 'b',
+        required = true,
+        help = "Cell barcode mapping TSV file.",
+        long_help = "Cell barcode mapping TSV file consisting of 2 columns:\n\
+        \u{20} 1) old cell barcodes\n\
+        \u{20} 2) new cell barcodes"
+    )]
+    barcode_mapping_tsv_path: PathBuf,
+    #[arg(
+        short='c',
+        default_value_t = String::from("CB"),
+        help="SAM tag used for old cell barcodes.",
+        long_help="SAM tag used for old cell barcodes in input BAM file.",
+    )]
+    old_bc_tag: String,
+    #[arg(
+        short='d',
+        default_value_t = String::from("CB"),
+        help="SAM tag to use for new cell barcodes.",
+        long_help="SAM tag to use for writing new cell barcodes to output BAM file.\n\
+        If the new SAM tag is the same as the old tag, the old SAM tag value will be overwritten.",
+    )]
+    new_bc_tag: String,
+}
 
 // We don't need to derive `Debug` (which doesn't require Serde), but it's a
 // good habit to do it for all your types.
@@ -45,15 +91,15 @@ fn read_barcode_mapping_tsv_file(
 }
 
 fn bam_update_cell_barcode(
-    input_bam_filename: &str,
-    output_bam_filename: &str,
+    input_bam_path: &Path,
+    output_bam_path: &Path,
     old_bc_tag: &str,
     new_bc_tag: &str,
     barcode_mapping: &BarcodeMapping,
 ) {
-    let mut input_bam = Reader::from_path(input_bam_filename).unwrap();
+    let mut input_bam = Reader::from_path(input_bam_path).unwrap();
     let header = Header::from_template(input_bam.header());
-    let mut output_bam = Writer::from_path(output_bam_filename, &header, Format::Bam).unwrap();
+    let mut output_bam = Writer::from_path(output_bam_path, &header, Format::Bam).unwrap();
 
     input_bam
         .set_threads(2)
@@ -97,30 +143,9 @@ fn bam_update_cell_barcode(
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let cli = Cli::parse();
 
-    if args.len() != 6 {
-        eprintln!(
-            "Usage: bam_update_cell_barcode input.bam output.bam barcode_mapping.tsv old_bc_tag new_bc_tag"
-        );
-        process::exit(1);
-    }
-
-    // Input BAM file.
-    let input_bam_filename = &args[1];
-    // Output BAM file.
-    let output_bam_filename = &args[2];
-    // TSV file with 2 columns: old cell barcode and new cell barcode.
-    let barcode_mapping_tsv_filename = &args[3];
-    // SAM tag in BAM file that contains the old cell barcode: e.g. "CB".
-    let old_bc_tag = &args[4];
-    // SAM tag in BAM file to which the new cell barcode will be written:
-    // e.g. "CB" (to overwrite the old one) or e.g. "de" (to write to a new tag and keep the old tag too).
-    let new_bc_tag = &args[5];
-
-    let barcode_mapping_tsv_path = Path::new(barcode_mapping_tsv_filename);
-
-    let barcode_mapping = match read_barcode_mapping_tsv_file(barcode_mapping_tsv_path) {
+    let barcode_mapping = match read_barcode_mapping_tsv_file(&cli.barcode_mapping_tsv_path) {
         Ok(barcode_mapping) => barcode_mapping,
         Err(e) => {
             println!("{}", e);
@@ -129,10 +154,10 @@ fn main() {
     };
 
     bam_update_cell_barcode(
-        input_bam_filename,
-        output_bam_filename,
-        old_bc_tag,
-        new_bc_tag,
+        &cli.input_bam_path,
+        &cli.output_bam_path,
+        &cli.old_bc_tag,
+        &cli.new_bc_tag,
         &barcode_mapping,
     );
 }
