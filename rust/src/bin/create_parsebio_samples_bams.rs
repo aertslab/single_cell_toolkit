@@ -140,8 +140,8 @@ fn parsebio_samples_bam(
     sublibrary_to_bam_mapping: &SublibraryToBamMapping,
     output_prefix: &str,
     cmd_line_str: &str,
-) {
-    let bam_thread_pool = ThreadPool::new(16);
+) -> Result<(), Box<dyn Error>> {
+    let bam_thread_pool = ThreadPool::new(16)?;
 
     // Get all sublibrary names and sort them.
     let mut sublibraries: Vec<&String> = sublibrary_to_bam_mapping.keys().collect();
@@ -154,8 +154,7 @@ fn parsebio_samples_bam(
     for (i, sublibrary) in sublibraries.iter().enumerate() {
         let bam = Reader::from_path(Path::new(
             sublibrary_to_bam_mapping.get(sublibrary.as_str()).unwrap(),
-        ))
-        .unwrap();
+        ))?;
 
         // Read BAM header from current ParseBio sublibrary BAM file.
         let original_header = Header::from_template(bam.header());
@@ -197,12 +196,9 @@ fn parsebio_samples_bam(
             format!("{}{}.bam", output_prefix, sample),
             &merged_header,
             Format::Bam,
-        )
-        .unwrap();
+        )?;
 
-        output_bam_writer
-            .set_thread_pool(bam_thread_pool.as_ref().unwrap())
-            .expect("Failed to set number of BAM reading threads to 16.");
+        output_bam_writer.set_thread_pool(&bam_thread_pool)?;
         sample_to_bam_writer_mapping
             .entry(sample.to_owned())
             .or_insert(output_bam_writer);
@@ -213,15 +209,12 @@ fn parsebio_samples_bam(
     for sublibrary in sublibraries {
         let mut input_bam = Reader::from_path(Path::new(
             sublibrary_to_bam_mapping.get(sublibrary.as_str()).unwrap(),
-        ))
-        .unwrap();
+        ))?;
 
-        input_bam
-            .set_thread_pool(bam_thread_pool.as_ref().unwrap())
-            .expect("Failed to set number of BAM reading threads to 16.");
+        input_bam.set_thread_pool(&bam_thread_pool)?;
 
         for r in input_bam.records() {
-            let mut record = r.unwrap();
+            let mut record = r?;
 
             if let Ok(Aux::String(cb)) = record.aux(cb_tag) {
                 let new_cb = format!("{}__{}", &cb, &sublibrary);
@@ -231,17 +224,19 @@ fn parsebio_samples_bam(
                 // filtered barcodes.
                 if let Some(sample) = barcode_to_sample_mapping.get(&new_cb) {
                     // Update CB tag value with full barcode name.
-                    record.remove_aux(cb_tag).unwrap();
-                    record.push_aux(cb_tag, Aux::String(&new_cb)).unwrap();
+                    record.remove_aux(cb_tag)?;
+                    record.push_aux(cb_tag, Aux::String(&new_cb))?;
 
                     if let Some(bam_writer) = sample_to_bam_writer_mapping.get_mut(sample) {
                         // Write current BAM record to correct per sample BAM file.
-                        bam_writer.write(&record).unwrap();
+                        bam_writer.write(&record)?;
                     }
                 }
             }
         }
     }
+
+    Ok(())
 }
 
 fn main() {
@@ -266,7 +261,7 @@ fn main() {
         match read_parsebio_cell_metadata_csv_file(parsebio_cell_metadata_csv_path) {
             Ok(barcode_to_sample_mapping) => barcode_to_sample_mapping,
             Err(e) => {
-                println!("{}", e);
+                println!("Error: {}", e);
                 process::exit(1);
             }
         };
@@ -277,15 +272,21 @@ fn main() {
         match read_parsebio_sublibrary_to_bam_csv_file(sublibrary_to_bam_csv_path) {
             Ok(sublibrary_to_bam_mapping) => sublibrary_to_bam_mapping,
             Err(e) => {
-                println!("{}", e);
+                println!("Error: {}", e);
                 process::exit(1);
             }
         };
 
-    parsebio_samples_bam(
+    let _ = match parsebio_samples_bam(
         &barcode_to_sample_mapping,
         &sublibrary_to_bam_mapping,
         output_prefix,
         &cmd_line_str,
-    );
+    ) {
+        Ok(()) => (),
+        Err(e) => {
+            println!("Error: {}", e);
+            process::exit(1);
+        }
+    };
 }
