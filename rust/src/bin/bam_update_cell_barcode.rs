@@ -96,23 +96,20 @@ fn bam_update_cell_barcode(
     old_bc_tag: &str,
     new_bc_tag: &str,
     barcode_mapping: &BarcodeMapping,
-) {
-    let mut input_bam = Reader::from_path(input_bam_path).unwrap();
+) -> Result<(), Box<dyn Error>> {
+    let mut input_bam = Reader::from_path(input_bam_path)?;
     let header = Header::from_template(input_bam.header());
-    let mut output_bam = Writer::from_path(output_bam_path, &header, Format::Bam).unwrap();
+    let mut output_bam = Writer::from_path(output_bam_path, &header, Format::Bam)?;
 
-    input_bam
-        .set_threads(2)
-        .expect("Failed to set number of BAM reading threads to 2.");
-    output_bam
-        .set_threads(5)
-        .expect("Failed to set number of BAM writing threads to 5.");
+    input_bam.set_threads(2)?;
+    output_bam.set_threads(5)?;
+
     let old_bc_tag = old_bc_tag.as_bytes();
     let new_bc_tag = new_bc_tag.as_bytes();
     let is_same_bc_tag = old_bc_tag == new_bc_tag;
 
     for r in input_bam.records() {
-        let mut record = r.unwrap();
+        let mut record = r?;
 
         // Check if we have an old barcode tag for the current BAM record.
         if let Ok(old_bc_aux) = record.aux(old_bc_tag) {
@@ -126,38 +123,52 @@ fn bam_update_cell_barcode(
             if let Some(new_bc) = new_bc {
                 if is_same_bc_tag {
                     // Remove existing CB tag and value if the new one has the same tag name.
-                    record.remove_aux(old_bc_tag).unwrap();
+                    record.remove_aux(old_bc_tag)?;
                 } else if let Ok(_new_bc_aux) = record.aux(new_bc_tag) {
                     // Remove existing new CB tag if it was there already.
-                    record.remove_aux(new_bc_tag).unwrap();
+                    record.remove_aux(new_bc_tag)?;
                 }
 
                 // Add new barcode tag and new barcode name to the current BAM record.
-                record.push_aux(new_bc_tag, Aux::String(new_bc)).unwrap();
+                record.push_aux(new_bc_tag, Aux::String(new_bc))?;
             }
         }
 
         // Write current BAM record to a new BAM file.
-        output_bam.write(&record).unwrap();
+        output_bam.write(&record)?;
     }
+
+    Ok(())
 }
 
 fn main() {
     let cli = Cli::parse();
 
+    // Read barcode mapping TSV file.
     let barcode_mapping = match read_barcode_mapping_tsv_file(&cli.barcode_mapping_tsv_path) {
         Ok(barcode_mapping) => barcode_mapping,
         Err(e) => {
-            println!("{}", e);
+            eprintln!(
+                "Error: \"{}\": {}",
+                &cli.barcode_mapping_tsv_path.to_string_lossy(),
+                e
+            );
             process::exit(1);
         }
     };
 
-    bam_update_cell_barcode(
+    // Update cell barcodes in a BAM file.
+    let _ = match bam_update_cell_barcode(
         &cli.input_bam_path,
         &cli.output_bam_path,
         &cli.old_bc_tag,
         &cli.new_bc_tag,
         &barcode_mapping,
-    );
+    ) {
+        Ok(()) => (),
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            process::exit(1);
+        }
+    };
 }
