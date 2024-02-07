@@ -1,15 +1,48 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::env;
 use std::error::Error;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process;
+
+use clap::Parser;
 
 use rust_htslib::bam::{record::Aux, Format, Header, HeaderView, Read, Reader, Writer};
 use rust_htslib::tpool::ThreadPool;
 
 // This lets us write `#[derive(Deserialize)]`.
 use serde::Deserialize;
+
+#[derive(Parser, Debug)]
+#[command(author, version, long_about = None)]
+#[command(name = "create_parsebio_samples_bam")]
+#[command(about = "Create per sample BAM files from ParseBio sublibrary BAM files.")]
+struct Cli {
+    // parsebio_cell_metadata.csv sublibrary_to_bam.csv output_prefix
+    #[arg(
+        short = 'm',
+        long = "metadata",
+        required = true,
+        help = "ParseBio cell metadata CSV file.",
+        long_help = "ParseBio cell metadata CSV file."
+    )]
+    parsebio_cell_metadata_csv_path: PathBuf,
+    #[arg(
+        short = 's',
+        long = "sublibrary_to_bam",
+        required = true,
+        help = "ParseBio sublibrary to BAM CSV file.",
+        long_help = "ParseBio sublibrary to BAM CSV file."
+    )]
+    parsebio_sublibrary_to_bam_csv_path: PathBuf,
+    #[arg(
+        short = 'o',
+        long = "output_prefix",
+        required = true,
+        help = "Output prefix.",
+        long_help = "Output prefix used to create output BAM files for each ParseBio sublibrary."
+    )]
+    output_prefix: PathBuf,
+}
 
 // ParseBio cell metadata CSV record.
 #[derive(Debug, Deserialize)]
@@ -138,7 +171,7 @@ fn filter_bam_header(header: &Header, sublibrary: &str) -> Vec<u8> {
 fn parsebio_samples_bam(
     barcode_to_sample_mapping: &BarcodeToSampleMapping,
     sublibrary_to_bam_mapping: &SublibraryToBamMapping,
-    output_prefix: &str,
+    output_prefix: &Path,
     cmd_line_str: &str,
 ) -> Result<(), Box<dyn Error>> {
     let bam_thread_pool = ThreadPool::new(16)?;
@@ -192,11 +225,13 @@ fn parsebio_samples_bam(
 
     // Initialize per sample BAM files with BAM header.
     for sample in samples {
-        let mut output_bam_writer = Writer::from_path(
-            format!("{}{}.bam", output_prefix, sample),
-            &merged_header,
-            Format::Bam,
-        )?;
+        let mut output_bam_path = PathBuf::from(output_prefix);
+        output_bam_path
+            .as_mut_os_string()
+            .push(format!("{}.bam", sample));
+
+        let mut output_bam_writer =
+            Writer::from_path(&output_bam_path, &merged_header, Format::Bam)?;
 
         output_bam_writer.set_thread_pool(&bam_thread_pool)?;
         sample_to_bam_writer_mapping
@@ -240,25 +275,17 @@ fn parsebio_samples_bam(
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let cli = Cli::parse();
 
-    if args.len() != 4 {
-        eprintln!(
-            "Usage: create_parsebio_samples_bam parsebio_cell_metadata.csv sublibrary_to_bam.csv output_prefix"
-        );
-        process::exit(1);
-    }
-
-    let parsebio_cell_metadata_csv_filename = &args[1];
-    let sublibrary_to_bam_csv_filename = &args[2];
-    let output_prefix = &args[3];
-
-    let cmd_line_str = format!("{} {} {} {}", &args[0], &args[1], &args[2], &args[3]);
-
-    let parsebio_cell_metadata_csv_path = Path::new(parsebio_cell_metadata_csv_filename);
+    let cmd_line_str = format!(
+        "create_parsebio_samples_bam {} {} {}",
+        &cli.parsebio_cell_metadata_csv_path.to_string_lossy(),
+        &cli.parsebio_sublibrary_to_bam_csv_path.to_string_lossy(),
+        &cli.output_prefix.to_string_lossy()
+    );
 
     let barcode_to_sample_mapping =
-        match read_parsebio_cell_metadata_csv_file(parsebio_cell_metadata_csv_path) {
+        match read_parsebio_cell_metadata_csv_file(&cli.parsebio_cell_metadata_csv_path) {
             Ok(barcode_to_sample_mapping) => barcode_to_sample_mapping,
             Err(e) => {
                 println!("Error: {}", e);
@@ -266,10 +293,8 @@ fn main() {
             }
         };
 
-    let sublibrary_to_bam_csv_path = Path::new(sublibrary_to_bam_csv_filename);
-
     let sublibrary_to_bam_mapping =
-        match read_parsebio_sublibrary_to_bam_csv_file(sublibrary_to_bam_csv_path) {
+        match read_parsebio_sublibrary_to_bam_csv_file(&cli.parsebio_sublibrary_to_bam_csv_path) {
             Ok(sublibrary_to_bam_mapping) => sublibrary_to_bam_mapping,
             Err(e) => {
                 println!("Error: {}", e);
@@ -280,7 +305,7 @@ fn main() {
     let _ = match parsebio_samples_bam(
         &barcode_to_sample_mapping,
         &sublibrary_to_bam_mapping,
-        output_prefix,
+        &cli.output_prefix,
         &cmd_line_str,
     ) {
         Ok(()) => (),
