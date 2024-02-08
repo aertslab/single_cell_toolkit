@@ -1,10 +1,10 @@
-use std::collections::HashMap;
-use std::collections::HashSet;
 use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::process;
 
 use clap::Parser;
+
+use hashbrown::{HashMap, HashSet};
 
 use rust_htslib::bam::{record::Aux, Format, Header, HeaderView, Read, Reader, Writer};
 use rust_htslib::tpool::ThreadPool;

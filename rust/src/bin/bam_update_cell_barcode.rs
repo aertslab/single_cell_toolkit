@@ -2,9 +2,9 @@ use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::process;
 
-use std::collections::HashMap;
-
 use clap::Parser;
+
+use hashbrown::HashMap;
 
 use rust_htslib::bam::{record::Aux, Format, Header, Read, Reader, Writer};
 
