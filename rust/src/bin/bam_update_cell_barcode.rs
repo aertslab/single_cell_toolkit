@@ -158,7 +158,7 @@ fn main() {
     };
 
     // Update cell barcodes in a BAM file.
-    let _ = match bam_update_cell_barcode(
+    match bam_update_cell_barcode(
         &cli.input_bam_path,
         &cli.output_bam_path,
         &cli.old_bc_tag,
