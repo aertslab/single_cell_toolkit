@@ -14,7 +14,7 @@ use serde::Deserialize;
 
 #[derive(Parser, Debug)]
 #[command(author, version, long_about = None)]
-#[command(name = "create_parsebio_samples_bam")]
+#[command(name = "create_parsebio_per_sample_bams")]
 #[command(about = "Create per sample BAM files from ParseBio sublibrary BAM files.")]
 struct Cli {
     // parsebio_cell_metadata.csv sublibrary_to_bam.csv output_prefix
@@ -168,7 +168,7 @@ fn filter_bam_header(header: &Header, sublibrary: &str) -> Vec<u8> {
 }
 
 // Read all ParseBio sublibrary BAM files and write per sample BAM files.
-fn parsebio_samples_bam(
+fn create_parsebio_per_sample_bams(
     barcode_to_sample_mapping: &BarcodeToSampleMapping,
     sublibrary_to_bam_mapping: &SublibraryToBamMapping,
     output_prefix: &Path,
@@ -302,7 +302,7 @@ fn main() {
             }
         };
 
-    let _ = match parsebio_samples_bam(
+    match create_parsebio_per_sample_bams(
         &barcode_to_sample_mapping,
         &sublibrary_to_bam_mapping,
         &cli.output_prefix,
