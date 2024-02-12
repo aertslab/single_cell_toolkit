@@ -17,7 +17,6 @@ use serde::Deserialize;
 #[command(name = "create_parsebio_per_sample_bams")]
 #[command(about = "Create per sample BAM files from ParseBio sublibrary BAM files.")]
 struct Cli {
-    // parsebio_cell_metadata.csv sublibrary_to_bam.csv output_prefix
     #[arg(
         short = 'm',
         long = "metadata",
@@ -207,7 +206,8 @@ fn create_parsebio_per_sample_bams(
 
     // Add "@PG" header line for "create_parsebio_samples_bam".
     let pg_header_line = format!(
-        "\n@PG\tID:create_parsebio_samples_bam\tPN:create_parsebio_samples VN:0.1 CL:{}",
+        "\n@PG\tID:create_parsebio_samples_bam\tPN:create_parsebio_samples VN:{} CL:{}",
+        env!("CARGO_PKG_VERSION"),
         &cmd_line_str
     )
     .into_bytes();
