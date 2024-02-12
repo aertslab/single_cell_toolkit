@@ -51,6 +51,19 @@ struct Cli {
         long_help = "Output prefix used to create output cluster BAM files for each cluster."
     )]
     output_prefix: PathBuf,
+    #[arg(
+        short = 'f',
+        long = "fragment_reads_only",
+        required = false,
+        help = "Only keep reads that will be used to create scATAC-seq fragments.",
+        long_help = "Only keep reads that will be used to create scATAC-seq fragments:\n\
+        \u{20} - read is properly paired.\n\
+        \u{20} - read and its pair are located on the same chromosome.\n\
+        \u{20} - read and its pair have a mapping quality of 30 or higher.\n\
+        \u{20} - insert size is at least 10 in absolute value.\n\
+        \u{20} - read is primary alignment."
+    )]
+    fragment_reads_only: bool,
 }
 
 // Sample name to BAM filename TSV record.
@@ -221,6 +234,7 @@ fn split_bams_per_cluster(
     cluster_to_samples_mapping: &ClusterToSamplesMapping,
     sample_to_cb_input_to_cb_output_and_cluster_mapping: &SampleToCellBarcodeInputToCellBarcodeOutputAndClusterMapping,
     output_prefix: &Path,
+    fragment_reads_only: bool,
     cmd_line_str: &str,
 ) -> Result<(), Box<dyn Error>> {
     let bam_thread_pool = ThreadPool::new(16)?;
@@ -326,6 +340,54 @@ fn split_bams_per_cluster(
         for r in input_bam.records() {
             let mut record = r?;
 
+            // Keep only read that will be used to create scATAC-seq fragment or all
+            // reads, depending on the settings.
+            let keep_read = match fragment_reads_only {
+                true => {
+                    let mut keep_read = false;
+
+                    // Only keep reads that will be used to create scATAC-seq fragments.
+                    //   - read is properly paired.
+                    //   - read and its pair are located on the same chromosome.
+                    //   - read and its pair have a mapping quality of 30 or higher.
+                    //   - insert size is at least 10 in absolute value.
+                    //   - read is primary alignment.
+                    if record.is_proper_pair()
+                        && record.tid() == record.mtid()
+                        && record.mapq() >= 30
+                        && record.insert_size().abs() >= 10
+                        && !record.is_secondary()
+                        && !record.is_supplementary()
+                    {
+                        if let Ok(mate_mapq_aux) = record.aux(b"MQ") {
+                            // So far MQ tags in BAM files have been of I8 or U8 type.
+                            let mate_mapq = match mate_mapq_aux {
+                                Aux::I8(mate_mapq) => mate_mapq as i32,
+                                Aux::I16(mate_mapq) => mate_mapq as i32,
+                                Aux::I32(mate_mapq) => mate_mapq,
+                                Aux::U8(mate_mapq) => mate_mapq as i32,
+                                Aux::U16(mate_mapq) => mate_mapq as i32,
+                                Aux::U32(mate_mapq) => mate_mapq as i32,
+                                _ => -1, // bail!("Value for MQ tag is not an integer."),
+                            };
+
+                            if mate_mapq >= 30 {
+                                // Keep current BAM record.
+                                keep_read = true;
+                            }
+                        }
+                    }
+
+                    keep_read
+                }
+                false => true,
+            };
+
+            if !keep_read {
+                // Skip unwanted reads.
+                continue;
+            }
+
             if let Ok(Aux::String(cb)) = record.aux(cb_tag) {
                 // Write BAM record with updated full barcode name to per
                 // sample BAM file, if the barcode was in the list of
@@ -385,6 +447,7 @@ fn main() {
         &cluster_to_samples_mapping,
         &sample_to_cb_input_to_cb_output_and_cluster_mapping,
         &cli.output_prefix,
+        cli.fragment_reads_only,
         &cmd_line_str,
     ) {
         Ok(()) => (),
