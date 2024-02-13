@@ -5,8 +5,11 @@ use std::process;
 use clap::Parser;
 use hashbrown::{HashMap, HashSet};
 
+use itertools::Itertools;
+use num_iter::range_step;
+
 use rust_htslib::bam::{
-    record::Aux, CompressionLevel, Format, Header, HeaderView, Read, Reader, Writer,
+    record::Aux, CompressionLevel, Format, Header, HeaderView, IndexedReader, Read, Record, Writer,
 };
 use rust_htslib::tpool::ThreadPool;
 
@@ -97,6 +100,7 @@ type CellBarcodeInputToCellBarcodeOutputAndClusterMapping =
 type SampleToCellBarcodeInputToCellBarcodeOutputAndClusterMapping =
     HashMap<String, CellBarcodeInputToCellBarcodeOutputAndClusterMapping>;
 
+type BamFileToBamIndexedReaderMapping = HashMap<String, IndexedReader>;
 type ClusterToBamWriterMapping = HashMap<String, Writer>;
 
 fn read_sample_to_bam_tsv_file(
@@ -238,11 +242,16 @@ fn split_bams_per_cluster(
     cmd_line_str: &str,
 ) -> Result<(), Box<dyn Error>> {
     let bam_thread_pool = ThreadPool::new(16)?;
+    let mut bam_file_to_bam_indexed_reader_mapping = BamFileToBamIndexedReaderMapping::new();
     let mut cluster_to_bam_writer_mapping = ClusterToBamWriterMapping::new();
 
     // Get all cluster names and sort them.
     let mut clusters: Vec<&String> = cluster_to_samples_mapping.keys().collect();
     clusters.sort_unstable();
+
+    let mut cluster_to_bam_records: HashMap<String, Vec<Record>> = HashMap::new();
+
+    let mut merged_header_view: Option<HeaderView> = None;
 
     // Construct BAM header for each per cluster BAM file by combining headers
     // of each per sample BAM file.
@@ -267,7 +276,13 @@ fn split_bams_per_cluster(
         let mut hd_and_sq_bam_header_lines: Option<Vec<u8>> = None;
 
         for (i, bam_filename) in bam_filenames.iter().enumerate() {
-            let bam = Reader::from_path(Path::new(bam_filename.as_str()))?;
+            let bam = bam_file_to_bam_indexed_reader_mapping
+                .entry(bam_filename.to_string())
+                .or_insert({
+                    let mut indexed_input_bam = IndexedReader::from_path(Path::new(bam_filename))?;
+                    indexed_input_bam.set_thread_pool(&bam_thread_pool)?;
+                    indexed_input_bam
+                });
 
             // Read BAM header from current sample BAM file.
             let original_header = Header::from_template(bam.header());
@@ -310,6 +325,7 @@ fn split_bams_per_cluster(
 
         let merged_header = Header::from_template(&HeaderView::from_bytes(&merged_header));
 
+        // Create per cluster BAM file writer.
         let mut cluster_bam_path = PathBuf::from(output_prefix);
         cluster_bam_path
             .as_mut_os_string()
@@ -323,95 +339,146 @@ fn split_bams_per_cluster(
         cluster_to_bam_writer_mapping
             .entry(cluster.to_string())
             .or_insert(cluster_bam_writer);
+
+        // Create empty vector to store BAM records for current cluster.
+        cluster_to_bam_records
+            .entry(cluster.to_string())
+            .or_default();
+
+        // Store merged header view for first cluster for later use to get chromosome names and lengths.
+        if merged_header_view.is_none() {
+            merged_header_view = Some(HeaderView::from_header(&merged_header));
+        }
     }
+
+    let merged_header_view = merged_header_view.unwrap();
 
     let cb_tag = b"CB";
 
-    for (bam_filename, sample) in bam_to_sample_mapping.iter() {
-        let mut input_bam: Reader = Reader::from_path(Path::new(bam_filename))?;
+    // Loop over each chromosome and fetch reads in chunks from each BAM file and sort
+    // them by position before writing them to the per cluster BAM file.
+    for tid in 0..merged_header_view.target_count() {
+        let chrom_end = merged_header_view.target_len(tid).unwrap();
 
-        input_bam.set_thread_pool(&bam_thread_pool)?;
+        // Fetch reads from each BAM file for each cluster in chunks of 10_000_000 bp and sort them by position.
+        for (start, end) in range_step(0, chrom_end, 10_000_000).tuple_windows() {
+            let start = start as i64;
+            let end = end as i64;
 
-        let sample_to_cb_input_to_cb_output_and_cluster_mapping =
-            sample_to_cb_input_to_cb_output_and_cluster_mapping
-                .get(sample)
-                .unwrap();
+            for (bam_filename, sample) in bam_to_sample_mapping.iter() {
+                let indexed_input_bam = bam_file_to_bam_indexed_reader_mapping
+                    .get_mut(bam_filename)
+                    .unwrap();
+                indexed_input_bam.fetch((tid, start, end))?;
 
-        for r in input_bam.records() {
-            let mut record = r?;
+                let sample_to_cb_input_to_cb_output_and_cluster_mapping =
+                    sample_to_cb_input_to_cb_output_and_cluster_mapping
+                        .get(sample)
+                        .unwrap();
 
-            // Keep only read that will be used to create scATAC-seq fragment or all
-            // reads, depending on the settings.
-            let keep_read = match fragment_reads_only {
-                true => {
-                    let mut keep_read = false;
+                // Filter reads of current chunk and write them to a per cluster vector.
+                for r in indexed_input_bam.records() {
+                    let mut record = r?;
 
-                    // Only keep reads that will be used to create scATAC-seq fragments.
-                    //   - read is properly paired.
-                    //   - read and its pair are located on the same chromosome.
-                    //   - read and its pair have a mapping quality of 30 or higher.
-                    //   - insert size is at least 10 in absolute value.
-                    //   - read is primary alignment.
-                    if record.is_proper_pair()
-                        && record.tid() == record.mtid()
-                        && record.mapq() >= 30
-                        && record.insert_size().abs() >= 10
-                        && !record.is_secondary()
-                        && !record.is_supplementary()
-                    {
-                        if let Ok(mate_mapq_aux) = record.aux(b"MQ") {
-                            // So far MQ tags in BAM files have been of I8 or U8 type.
-                            let mate_mapq = match mate_mapq_aux {
-                                Aux::I8(mate_mapq) => mate_mapq as i32,
-                                Aux::I16(mate_mapq) => mate_mapq as i32,
-                                Aux::I32(mate_mapq) => mate_mapq,
-                                Aux::U8(mate_mapq) => mate_mapq as i32,
-                                Aux::U16(mate_mapq) => mate_mapq as i32,
-                                Aux::U32(mate_mapq) => mate_mapq as i32,
-                                _ => -1, // bail!("Value for MQ tag is not an integer."),
-                            };
+                    if record.pos() < start || record.pos() > end {
+                        // Skip reads that are not in the current region, which might
+                        // be pulled in when using fetch as this might result in
+                        // duplicated reads in the output.
+                        continue;
+                    }
 
-                            if mate_mapq >= 30 {
-                                // Keep current BAM record.
-                                keep_read = true;
+                    // Keep only read that will be used to create scATAC-seq fragment or all
+                    // reads, depending on the settings.
+                    let keep_read = match fragment_reads_only {
+                        true => {
+                            let mut keep_read = false;
+
+                            // Only keep reads that will be used to create scATAC-seq fragments.
+                            //   - read is properly paired.
+                            //   - read and its pair are located on the same chromosome.
+                            //   - read and its pair have a mapping quality of 30 or higher.
+                            //   - insert size is at least 10 in absolute value.
+                            //   - read is primary alignment.
+                            if record.is_proper_pair()
+                                && record.tid() == record.mtid()
+                                && record.mapq() >= 30
+                                && record.insert_size().abs() >= 10
+                                && !record.is_secondary()
+                                && !record.is_supplementary()
+                            {
+                                if let Ok(mate_mapq_aux) = record.aux(b"MQ") {
+                                    // So far MQ tags in BAM files have been of I8 or U8 type.
+                                    let mate_mapq = match mate_mapq_aux {
+                                        Aux::I8(mate_mapq) => mate_mapq as i32,
+                                        Aux::I16(mate_mapq) => mate_mapq as i32,
+                                        Aux::I32(mate_mapq) => mate_mapq,
+                                        Aux::U8(mate_mapq) => mate_mapq as i32,
+                                        Aux::U16(mate_mapq) => mate_mapq as i32,
+                                        Aux::U32(mate_mapq) => mate_mapq as i32,
+                                        _ => -1, // bail!("Value for MQ tag is not an integer."),
+                                    };
+
+                                    if mate_mapq >= 30 {
+                                        // Keep current BAM record.
+                                        keep_read = true;
+                                    }
+                                }
+                            }
+
+                            keep_read
+                        }
+                        false => true,
+                    };
+
+                    if !keep_read {
+                        // Skip unwanted reads.
+                        continue;
+                    }
+
+                    if let Ok(Aux::String(cb)) = record.aux(cb_tag) {
+                        // Add BAM record with updated full barcode name to per
+                        // cluster vector, if the barcode was in the list of
+                        // filtered barcodes.
+                        if let Some(cb_output_and_cluster) =
+                            sample_to_cb_input_to_cb_output_and_cluster_mapping.get(cb)
+                        {
+                            let CellBarcodeOutputAndCluster {
+                                cell_barcode_output: cb_output,
+                                cluster,
+                            } = cb_output_and_cluster;
+
+                            // Update CB tag value with full barcode name.
+                            record.remove_aux(cb_tag)?;
+                            record.push_aux(cb_tag, Aux::String(cb_output))?;
+
+                            // Add current BAM record to correct per cluster vector.
+                            if let Some(cluster_bam_records) =
+                                cluster_to_bam_records.get_mut(cluster)
+                            {
+                                cluster_bam_records.push(record);
                             }
                         }
                     }
-
-                    keep_read
                 }
-                false => true,
-            };
-
-            if !keep_read {
-                // Skip unwanted reads.
-                continue;
             }
 
-            if let Ok(Aux::String(cb)) = record.aux(cb_tag) {
-                // Write BAM record with updated full barcode name to per
-                // sample BAM file, if the barcode was in the list of
-                // filtered barcodes.
-                if let Some(cb_output_and_cluster) =
-                    sample_to_cb_input_to_cb_output_and_cluster_mapping.get(cb)
-                {
-                    let CellBarcodeOutputAndCluster {
-                        cell_barcode_output: cb_output,
-                        cluster,
-                    } = cb_output_and_cluster;
+            // Sort reads by position (for the current chunk) for each cluster and
+            // write them to per cluster BAM file.
+            for (cluster, cluster_bam_records) in cluster_to_bam_records.iter_mut() {
+                let cluster_bam_writer = cluster_to_bam_writer_mapping.get_mut(cluster).unwrap();
 
-                    // Update CB tag value with full barcode name.
-                    record.remove_aux(cb_tag)?;
-                    record.push_aux(cb_tag, Aux::String(cb_output))?;
+                cluster_bam_records
+                    .sort_by(|a, b| a.tid().cmp(&b.tid()).then(a.pos().cmp(&b.pos())));
 
-                    if let Some(bam_writer) = cluster_to_bam_writer_mapping.get_mut(cluster) {
-                        // Write current BAM record to correct per sample BAM file.
-                        bam_writer.write(&record)?;
-                    }
+                for record in cluster_bam_records.iter() {
+                    cluster_bam_writer.write(record)?;
                 }
+
+                cluster_bam_records.clear();
             }
         }
     }
+
     Ok(())
 }
 
