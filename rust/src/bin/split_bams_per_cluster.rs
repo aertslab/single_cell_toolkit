@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::process;
@@ -86,6 +87,7 @@ struct ClusterToCbSampleRecord {
 }
 
 type BamToSampleMapping = HashMap<String, String>;
+type BamToSampleBTreeMapping = BTreeMap<String, String>;
 
 type SampleSet = HashSet<String>;
 type ClusterToSamplesMapping = HashMap<String, SampleSet>;
@@ -105,7 +107,7 @@ type ClusterToBamWriterMapping = HashMap<String, Writer>;
 
 fn read_sample_to_bam_tsv_file(
     sample_to_bam_tsv_path: &Path,
-) -> Result<BamToSampleMapping, Box<dyn Error>> {
+) -> Result<BamToSampleBTreeMapping, Box<dyn Error>> {
     let mut bam_to_sample_mapping: BamToSampleMapping = BamToSampleMapping::new();
 
     // Build a CSV reader for a plain TSV file.
@@ -126,6 +128,14 @@ fn read_sample_to_bam_tsv_file(
             .entry(sample_to_bam_record.bam_filename.clone())
             .or_insert(sample_to_bam_record.sample.clone());
     }
+
+    // Create a BTreeMap from the BAM to sample HashMap to have a deterministic read
+    // order in the output cluster BAM files for reads with the same start position.
+    let bam_to_sample_mapping: BamToSampleBTreeMapping = bam_to_sample_mapping
+        .iter()
+        .sorted_by_key(|(k, _v)| *k)
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect::<_>();
 
     Ok(bam_to_sample_mapping)
 }
@@ -234,7 +244,7 @@ fn get_non_hd_sq_and_fix_pg_bam_header_lines(header: &Header, sample: &str) -> V
 }
 
 fn split_bams_per_cluster(
-    bam_to_sample_mapping: &BamToSampleMapping,
+    bam_to_sample_mapping: &BamToSampleBTreeMapping,
     cluster_to_samples_mapping: &ClusterToSamplesMapping,
     sample_to_cb_input_to_cb_output_and_cluster_mapping: &SampleToCellBarcodeInputToCellBarcodeOutputAndClusterMapping,
     output_prefix: &Path,
