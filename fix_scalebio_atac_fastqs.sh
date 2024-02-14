@@ -5,7 +5,8 @@
 # Purpose:
 #   Fix ScaleBio ATAC R2 and R3 reads after standard demultiplexing so
 #   afterwards R2 contains 16 bp 10X ATAC barcode and 8 bp tagmentation
-#   barcode and R3 contains only the second ATAC read.
+#   barcode or 40 bp HyDrop ATAC barcode and 8 bp tagmentation barcode
+#   and R3 contains only the second ATAC read.
 
 
 decompress_fastq_cat_cmd='cat';
@@ -31,21 +32,26 @@ compress_fastq_gzip_cmd="gzip -${compress_fastq_level} -c";
 fix_scalebio_atac_fastqs () {
     local fastq_R2_filename="${1}";
     local fastq_R3_filename="${2}";
-    local compress_fastq_cmd="${3:-bgzip}";
+    local check_or_fix="${3}";
+    local compress_fastq_cmd="${4:-bgzip}";
 
-    if [ ${#@} -lt 2 ] ; then
+    if [ ${#@} -lt 3 ] ; then
         printf '\nUsage:\n';
         printf '    fix_scalebio_atac_fastqs \\\n';
         printf '        fastq_R2 \\\n';
         printf '        fastq_R3 \\\n';
+        printf '        check|fix \\\n';
         printf '        <compress_fastq_cmd [bgzip|pigz|gzip|stdout|-|uncompressed]> \\\n\n';
         printf 'Purpose: Fix ScaleBio ATAC R2 and R3 reads after standard demultiplexing so\n';
         printf '         afterwards R2 contains 16 bp 10X ATAC barcode and 8 bp tagmentation\n';
-        printf '         barcode and R3 contains only the second ATAC read.\n\n';
+        printf '         barcode or 40 bp HyDrop ATAC barcode and 8 bp tagmentation barcode\n';
+        printf '         and R3 contains only the second ATAC read.\n\n';
         printf 'Parameters:\n';
         printf '  - fastq_R2:   FASTQ R2 filename with 10x barcodes (gzipped).\n';
         printf '  - fastq_R3:   FASTQ R3 filename with tagmentation barcode,\n';
         printf '                spacer and ATAC read (gzipped).\n';
+        printf '  - check|fix:  Check if given FASTQ files contain ScaleBio ATAC with 10x or\n';
+        printf '                or HyDrop ATAC barcodes and optionally fix FASTQ files.\n'
         printf '  - compress_fastq_cmd:\n';
         printf '      - Compression program to use for output FASTQ files:\n';
         printf "          - \"bgzip\":  '%s'  (default)\n" "${compress_fastq_bgzip_cmd}";
@@ -114,7 +120,7 @@ fix_scalebio_atac_fastqs () {
          return 1;
     fi
 
-
+    # Check if input R3 (real read2) FASTQ file contains ScaleBio ATAC tagmentation barcodes.
     local is_scalebio_ATAC=$(
         mawk \
             -v fastq_R3_filename="${fastq_R3_filename}" \
@@ -177,6 +183,9 @@ fix_scalebio_atac_fastqs () {
             scalebio_atac_tagmentation_barcodes["GGAGCGTC"] = 0;
             scalebio_atac_tagmentation_barcodes["CTAGCGCT"] = 0;
 
+            hydrop_ligation1 = "GGGAC";
+            hydrop_ligation2 = "GTCAG";
+
             # Read FASTQ input file.
             while ( (read_fastq_R3_cmd | getline) > 0 ) {
                 fastq_line_number += 1;
@@ -201,7 +210,7 @@ fix_scalebio_atac_fastqs () {
                         #   - 8 bp tagmentation barcode
                         #   - 19 bp spacer
                         #   - ATAC sequence read (assume 30 bp is the minimum).
-                        exit;
+                        continue;
                     }
 
                     if ( substr($0, 1, 8)  in scalebio_atac_tagmentation_barcodes ) {
@@ -227,7 +236,75 @@ fix_scalebio_atac_fastqs () {
 
 
     if [ "${is_scalebio_ATAC}" == "is_scalebio_ATAC" ] ; then
-        printf 'FASTQ "%s" contains ScaleBio ATAC tagmentation barcodes.\n' "${fastq_R3_filename}";
+        # Check if input R2 (index 2) FASTQ file contain 10x or HyDrop ATAC barcodes.
+        local is_hydrop_scalebio_ATAC=$(
+            mawk \
+                -v fastq_R2_filename="${fastq_R2_filename}" \
+                -v decompress_fastq_cmd="${decompress_fastq_gzipped_cmd}" \
+            '
+            BEGIN {
+                read_fastq_R2_cmd = decompress_fastq_cmd " " fastq_R2_filename;
+
+                fastq_line_number = 0;
+                is_hydrop_ATAC = 0;
+
+                # ScaleATAC tagmentation barcode whitelist (rev comp).
+                hydrop_ligation1 = "GGGAC";
+                hydrop_ligation2 = "GTCAG";
+
+                # Read FASTQ input file.
+                while ( (read_fastq_R2_cmd | getline) > 0 ) {
+                    fastq_line_number += 1;
+                    fastq_part = fastq_line_number % 4;
+
+                    if ( fastq_line_number == 100000 ) {
+                        # Go to end block after reading 100000 lines.
+                        exit;
+                    }
+
+                    if ( fastq_part == 1 ) {
+                        if ( $2 !~ /^2:/ ) {
+                            # FASTQ file is not R3 read.
+                            exit;
+                        }
+                    } else if ( fastq_part == 2 ) {
+                        # Sequence lines.
+                        seq_length = length($0);
+
+                        if ( seq_length < 40) {
+                            # FASTQ file is likely not HyDropATAC as it should have:
+                            #   - 3x 10bp barcode separated with 2 5bp spacers.
+                            continue;
+                        }
+
+                        if ( ( substr($0, 11, 5) == hydrop_ligation1 ) && ( substr($0, 26, 5) == hydrop_ligation2 ) ) {
+                            is_hydrop_ATAC += 1;
+                        }
+                    }
+                }
+            }
+            END {
+                # Number of FASTQ reads read (25000 or less if small FASTQ file).
+                nbr_fastq_reads = fastq_line_number / 4;
+
+                # If 60% of the reads matched the 2 5bp hydrop ATAC spacers
+                # assume it contains HyDrop ScaleATAC.
+                if ( ( is_hydrop_ATAC / nbr_fastq_reads ) >= 0.6 ) {
+                    print "is_hydrop_scalebio_ATAC";
+                } else {
+                    print "is_10x_scalebio_ATAC";
+                }
+            }
+            '
+        );
+
+        if [ "${is_hydrop_scalebio_ATAC}" == "is_hydrop_scalebio_ATAC" ] ; then
+            printf 'FASTQ "%s" contains ScaleBio ATAC tagmentation barcodes.\nFASTQ "%s" contains HyDrop ATAC barcodes.\n' "${fastq_R3_filename}" "${fastq_R2_filename}";
+            is_hydrop_scalebio_ATAC=1;
+        else
+            printf 'FASTQ "%s" contains ScaleBio ATAC tagmentation barcodes.\nFASTQ "%s" contains 10x ATAC barcodes.\n' "${fastq_R3_filename}" "${fastq_R2_filename}";
+            is_hydrop_scalebio_ATAC=0;
+        fi
     else
         # Uncomment for debugging.
         #printf 'FASTQ "%s" contains %s\n' "${fastq_R3_filename}" "${is_scATAC_or_multiome_ATAC}";
@@ -236,6 +313,11 @@ fix_scalebio_atac_fastqs () {
         return 0;
     fi
 
+    if [ "${check_or_fix}" != "fix" ] ; then
+        # Quit here if "fix" was not requested and just report if the FASTQ files
+        # contained ScaleBio ATAC with 10x or HyDrop ATAC barcodes.
+        return 0;
+    fi
 
     local fastq_R2_output_filename="${fastq_R2_filename}.fixed.fq.gz";
     local fastq_R3_output_filename="${fastq_R3_filename}.fixed.fq.gz";
@@ -248,6 +330,7 @@ fix_scalebio_atac_fastqs () {
         -v fastq_R3_output_filename="${fastq_R3_output_filename}" \
         -v decompress_fastq_cmd="${decompress_fastq_gzipped_cmd}" \
         -v compress_fastq_cmd="${compress_fastq_cmd}" \
+        -v is_hydrop_scalebio_ATAC="${is_hydrop_scalebio_ATAC}" \
     '
     BEGIN {
         read_fastq_R2_cmd = decompress_fastq_cmd " " fastq_R2_filename;
@@ -306,7 +389,10 @@ fix_scalebio_atac_fastqs () {
                     if ( sequence_R2_length == 24 ) {
                         print "Error: Read name R2 (\"" read_name_R2 "\") has a sequence length of 24 instead of 16 and is probably already fixed (line number: " fastq_line_number ").";
                         exit(1);
-                    } else if ( sequence_R2_length != 16 ) {
+                    } else if ( sequence_R2_length == 48 ) {
+                        print "Error: Read name R2 (\"" read_name_R2 "\") has a sequence length of 48 instead of 40 and is probably already fixed (line number: " fastq_line_number ").";
+                        exit(1);
+                    } else if ( ( sequence_R2_length != 16 ) && ( sequence_R2_length != 40 ) ) {
                         print "Error: Read name R2 (\"" read_name_R2 "\") has a sequence length of " sequence_R2_length " instead of 16 (line number: " fastq_line_number ").";
                         exit(1);
                     }
@@ -315,7 +401,14 @@ fix_scalebio_atac_fastqs () {
 
                     # Write the full FASTQ record to the R1 and R2 output FASTQ file with barcode info in front of the read name.
                     # When write_fastq_R1_cmd and write_fastq_R2_cmd are the same, an interleaved FASTQ fille will be written.
-                    print "@" read_name_R2_full "\n" sequence_R2 substr(sequence_R3, 1, 8) "\n+\n" fastq_R2_line substr(fastq_R3_line, 1, 8) | write_fastq_R2_cmd;
+                    if ( is_hydrop_scalebio_ATAC == 1 ) {
+                        # ScaleATAC with HyDrop ATAC barcodes.
+                        print "@" read_name_R2_full "\n" substr(sequence_R2, 1, 40) substr(sequence_R3, 1, 8) "\n+\n" substr(fastq_R2_line, 1, 40) substr(fastq_R3_line, 1, 8) | write_fastq_R2_cmd;
+                    } else {
+                        # ScaleATAC with 10x ATAC barcodes.
+                        print "@" read_name_R2_full "\n" substr(sequence_R2, 1, 16) substr(sequence_R3, 1, 8) "\n+\n" substr(fastq_R2_line, 1, 16) substr(fastq_R3_line, 1, 8) | write_fastq_R2_cmd;
+                    }
+
                     print "@" read_name_R3_full "\n" substr(sequence_R3, 28) "\n+\n" substr(fastq_R3_line, 28) | write_fastq_R3_cmd;
                 }
             }
