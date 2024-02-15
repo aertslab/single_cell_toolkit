@@ -396,7 +396,8 @@ fn split_bams_per_cluster(
                     for r in indexed_input_bam.records() {
                         let mut record = r?;
 
-                        if record.pos() < start || record.pos() > end {
+                        if record.pos() < start || record.pos() > end || record.tid() != tid as i32
+                        {
                             // Skip reads that are not in the current region, which might
                             // be pulled in when using fetch as this might result in
                             // duplicated reads in the output.
