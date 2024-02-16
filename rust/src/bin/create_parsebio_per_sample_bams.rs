@@ -21,16 +21,33 @@ struct Cli {
         short = 'm',
         long = "metadata",
         required = true,
-        help = "ParseBio cell metadata CSV file.",
-        long_help = "ParseBio cell metadata CSV file."
+        help = "Combined ParseBio cell metadata CSV file.",
+        long_help = "Combined ParseBio cell metadata CSV file for all wells.\n\
+        \u{20} e.g.: \"./parsebio_output/combined/all-well/DGE_filtered/cell_metadata.csv\"."
     )]
     parsebio_cell_metadata_csv_path: PathBuf,
     #[arg(
         short = 's',
         long = "sublibrary_to_bam",
         required = true,
-        help = "ParseBio sublibrary to BAM CSV file.",
-        long_help = "ParseBio sublibrary to BAM CSV file."
+        help = "ParseBio sublibrary to BAM filename CSV file.",
+        long_help = "ParseBio sublibrary to BAM filename CSV file consisting of 2 columns:\n\
+        \u{20} 1) sublibrary name:\n\
+        \u{20}      Last part of \"bc_wells\" column of cell metadata CSV file.\n\
+        \u{20}        e.g.: \"01_01_26__s1\" => \"s1\"\n\n\
+        \u{20} 2) BAM filename for that sublibrary:\n\
+        \u{20}    - Example:\n\
+        \u{20}        sublibrary,bam_filename\n\
+        \u{20}        s1,./parsebio_output/PB-001-a-RNA/process/barcode_headAligned_anno.bam\n\
+        \u{20}        s2,./parsebio_output/PB-001-b-RNA/process/barcode_headAligned_anno.bam\n\
+        \u{20}        s3,./parsebio_output/PB-001-c-RNA/process/barcode_headAligned_anno.bam\n\n\
+        \u{20}    - Command:\n\
+        \u{20}        If the sublibraries can be sorted by natural sort in the same order as given to\n\
+        \u{20}        \"split-pipe --mode comb\", then the following command will be able to generate the file.\n\n\
+        \u{20}        find ./parsebio_output -name 'barcode_headAligned_anno.bam' \\\n\
+        \u{20}          | LC_ALL=C sort -V \\\n\
+        \u{20}          | awk -F '\\t' 'BEGIN { print \"sublibrary,bam_filename\"; } { print \"s\" NR \",\" $0; }' \\\n\
+        \u{20}          > ./parsebio_output/sublibrary_bam.csv"
     )]
     parsebio_sublibrary_to_bam_csv_path: PathBuf,
     #[arg(
