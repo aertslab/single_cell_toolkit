@@ -45,19 +45,20 @@ struct Cli {
 
 // ParseBio cell metadata CSV record.
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct ParseBioCellMetadataRecord {
     bc_wells: String,
     sample: String,
-    _species: String,
-    _gene_count: u32,
-    _tscp_count: u32,
-    _mread_count: u32,
-    _bc1_well: String,
-    _bc2_well: String,
-    _bc3_well: String,
-    _bc1_wind: u8,
-    _bc2_wind: u8,
-    _bc3_wind: u8,
+    species: String,
+    gene_count: u32,
+    tscp_count: u32,
+    mread_count: u32,
+    bc1_well: String,
+    bc2_well: String,
+    bc3_well: String,
+    bc1_wind: u8,
+    bc2_wind: u8,
+    bc3_wind: u8,
 }
 
 // ParseBio sublibrary to BAM file CSV file record.
