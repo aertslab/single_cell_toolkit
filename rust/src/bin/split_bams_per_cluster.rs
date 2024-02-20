@@ -367,6 +367,13 @@ fn split_bams_per_cluster(
 
     let merged_header_view = merged_header_view.unwrap();
 
+    // Filter out BAM files that are not in any requested cluster.
+    let bam_to_sample_mapping: BamToSampleBTreeMapping = bam_to_sample_mapping
+        .iter()
+        .filter(|(k, _v)| bam_file_to_bam_indexed_reader_mapping.get(*k).is_some())
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+
     let cb_tag = b"CB";
 
     // Loop over each chromosome and fetch reads in chunks from each BAM file and sort
