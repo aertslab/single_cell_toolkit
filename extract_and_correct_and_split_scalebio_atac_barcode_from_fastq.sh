@@ -15,6 +15,7 @@ CODON_RUN="codon run -plugin seq -release";
 CODON_OR_SEQ_RUN="${CODON_OR_SEQ_RUN:-${CODON_RUN}}";
 
 cellranger_atac_737k_cratac_v1_barcode_list_filename='/staging/leuven/res_00001/barcodes/cellranger_atac.737K-cratac-v1.txt.gz';
+hydrop_atac_v2_barcode_list_filename='/staging/leuven/res_00001/barcodes/HyDrop_v2.txt';
 
 
 
@@ -24,6 +25,7 @@ extract_and_correct_and_split_scalebio_atac_barcode_from_fastq () {
     local fastq_R3="${3}";
     local fastq_output_dir="${4}";
     local scalebio_bc_type="${5:-scalebioih}";
+    local scatac_bc_type="${6:-10x}";
 
     if [ ${#@} -lt 4 ] ; then
         printf '\nUsage:\n';
@@ -32,7 +34,8 @@ extract_and_correct_and_split_scalebio_atac_barcode_from_fastq () {
         printf '        fastq_R2 \\\n';
         printf '        fastq_R3 \\\n';
         printf '        fastq_output_dir \\\n';
-        printf '        [scalebio_bc_type] \\\n\n';
+        printf '        [scalebio_bc_type] \\\n';
+        printf '        [scatac_bc_type]\n\n';
         printf 'Purpose: Correct ScaleBio ATAC tagmentation barcode and use it to split read 1\n';
         printf '         and read 2 in different FASTQ files based on the tagmentation barcode.\n\n';
         printf 'Parameters:\n';
@@ -43,11 +46,25 @@ extract_and_correct_and_split_scalebio_atac_barcode_from_fastq () {
         printf '  - scalebio_bc_type:\n';
         printf '        ScaleBio tagmentation barcode type set to look for:\n';
         printf '        "scalebio" (original ScaleBio) or "scalebioih" (ScaleBio inhouse: default).\n';
+        printf '  - scatac_bc_type:\n';
+        printf '        Single-cell ATAC barcode type set to look for:\n';
+        printf '        "10x" (10x ATAC: default) or "hydrop" (HyDrop ATAC v2).\n';
         return 1;
     fi
 
     # Create correct tagmentation barcode filename.
-    local corrected_bc_filename="${output_dir%/}/$(basename "${fastq_R2%.fastq.gz}.corrected_bc.zst")";
+    local corrected_bc_filename="${fastq_output_dir%/}/$(basename "${fastq_R2%.fastq.gz}.corrected_bc.zst")";
+
+    scatac_bc_type="${scatac_bc_type,,}";
+
+    if [ "${scatac_bc_type}" == "10x" ] ; then
+        scatac_barcode_list_filename="${cellranger_atac_737k_cratac_v1_barcode_list_filename}";
+    elif [ "${scatac_bc_type}" == "hydrop" ] ; then
+        scatac_barcode_list_filename="${hydrop_atac_v2_barcode_list_filename}";
+    else
+        printf 'Error: Invalid scatac_bc_type "%s". Choose: "10x" or "hydrop".\n' "${scatac_bc_type}";
+        return 1;
+    fi
 
 
     if ! type "${CODON_OR_SEQ_RUN%% *}" > /dev/null 2>&1 ; then
@@ -81,7 +98,7 @@ extract_and_correct_and_split_scalebio_atac_barcode_from_fastq () {
 
     # Correct ScaleBio ATAC tagmentation barcodes.
     "${script_dir}/extract_and_correct_scalebio_atac_barcode_from_fastq.sh" \
-        "${cellranger_atac_737k_cratac_v1_barcode_list_filename}" \
+        "${scatac_barcode_list_filename}" \
         "${fastq_R2}" \
         "${corrected_bc_filename}" \
         "${scalebio_bc_type}" \
