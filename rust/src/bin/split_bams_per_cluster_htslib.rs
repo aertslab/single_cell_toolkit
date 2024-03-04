@@ -21,7 +21,7 @@ use serde::Deserialize;
 
 #[derive(Parser, Debug)]
 #[command(author, version, long_about = None)]
-#[command(name = "split_bams_per_cluster")]
+#[command(name = "split_bams_per_cluster_htslib")]
 #[command(about = "Split BAM files in per cluster BAM files based on cell barcodes.")]
 #[command(
     about = "Split (multiple) BAM file(s) in per cluster BAM files based on a list of cell barcodes per cluster."
@@ -328,9 +328,9 @@ fn split_bams_per_cluster(
             Ok::<(), Box<dyn Error>>(())
         })?;
 
-        // Add "@PG" header line for "split_bams_per_cluster".
+        // Add "@PG" header line for "split_bams_per_cluster_htslib".
         let pg_header_line = format!(
-            "\n@PG\tID:split_bams_per_cluster\tPN:split_bams_per_cluster VN:{} CL:{}",
+            "\n@PG\tID:split_bams_per_cluster_htslib\tPN:split_bams_per_cluster_htslib VN:{} CL:{}",
             env!("CARGO_PKG_VERSION"),
             &cmd_line_str
         )
@@ -525,7 +525,7 @@ fn main() {
     let cli = Cli::parse();
 
     let cmd_line_str = format!(
-        "split_bams_per_cluster -s {} -c {} -o {}",
+        "split_bams_per_cluster_htslib -s {} -c {} -o {}",
         &cli.sample_to_bam_tsv_path.to_string_lossy(),
         &cli.cluster_to_cb_and_sample_tsv_path.to_string_lossy(),
         &cli.output_prefix.to_string_lossy()
