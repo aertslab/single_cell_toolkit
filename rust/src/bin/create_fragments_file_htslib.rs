@@ -194,8 +194,8 @@ fn main() {
 Purpose: Create fragments file from BAM file.
 
 Usage:
-    create_fragments_file sample.bam \
-      | bgzip -@ 4 -c /dev/stdin \
+    create_fragments_file_htslib sample.bam \
+      | bgzip -@ 2 -c /dev/stdin \
       > sample.fragments.raw.tsv.gz
 
     - Create fragments file from coordinate sorted BAM file:
