@@ -9,7 +9,6 @@
 #   and R3 contains only the second ATAC read.
 
 
-decompress_fastq_cat_cmd='cat';
 decompress_fastq_zcat_cmd='zcat';
 decompress_fastq_igzip_cmd='igzip -c -d';
 
@@ -47,7 +46,7 @@ fix_scalebio_atac_fastqs () {
         printf '         barcode or 40 bp HyDrop ATAC barcode and 8 bp tagmentation barcode\n';
         printf '         and R3 contains only the second ATAC read.\n\n';
         printf 'Parameters:\n';
-        printf '  - fastq_R2:   FASTQ R2 filename with 10x barcodes (gzipped).\n';
+        printf '  - fastq_R2:   FASTQ R2 filename with 10x or HyDrop ATAC barcodes (gzipped).\n';
         printf '  - fastq_R3:   FASTQ R3 filename with tagmentation barcode,\n';
         printf '                spacer and ATAC read (gzipped).\n';
         printf '  - check|fix:  Check if given FASTQ files contain ScaleBio ATAC with 10x or\n';
@@ -64,15 +63,6 @@ fix_scalebio_atac_fastqs () {
         printf '        To change compression level:\n';
         printf '          - export compress_fastq_level="%s"\n\n' "${compress_fastq_level}";
         return 1;
-    fi
-
-
-    if type igzip > /dev/null 2>&1 ; then
-        # Decompress gzipped FASTQ files with igzip if installed (6x faster than gzip).
-        local decompress_fastq_gzipped_cmd="${decompress_fastq_igzip_cmd}";
-    else
-        # Decompress gzipped FASTQ files with gzip.
-        local decompress_fastq_gzipped_cmd="${decompress_fastq_zcat_cmd}";
     fi
 
 
@@ -95,6 +85,15 @@ fix_scalebio_atac_fastqs () {
     if [ ! -e "${fastq_R3_filename}" ] ; then
         printf 'Error: FASTQ file "%s" does not exist.\n' "${fastq_R3_filename}";
         return 1;
+    fi
+
+
+    if type igzip > /dev/null 2>&1 ; then
+        # Decompress gzipped FASTQ files with igzip if installed (6x faster than gzip).
+        local decompress_fastq_gzipped_cmd="${decompress_fastq_igzip_cmd}";
+    else
+        # Decompress gzipped FASTQ files with gzip.
+        local decompress_fastq_gzipped_cmd="${decompress_fastq_zcat_cmd}";
     fi
 
 

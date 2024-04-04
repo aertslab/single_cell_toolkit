@@ -29,18 +29,22 @@ compress_fastq_gzip_cmd="gzip -${compress_fastq_level} -c";
 
 
 fix_R2_read_10x_scATAC_and_10x_multiome_ATAC_fastq () {
-    local fastq_input_filename="${1}";
-    local compress_fastq_cmd="${2:-bgzip}";
+    local fastq_R2_filename="${1}";
+    local check_or_fix="${2}";
+    local compress_fastq_cmd="${3:-bgzip}";
 
-    if [ ${#@} -lt 1 ] ; then
+    if [ ${#@} -lt 2 ] ; then
         printf '\nUsage:\n';
         printf '    fix_R2_read_10x_scATAC_and_10x_multiome_ATAC_fastq \\\n';
-        printf '        fastq \\\n';
+        printf '        fastq_R2 \\\n';
+        printf '        check|fix \\\n';
         printf '        <compress_fastq_cmd [bgzip|pigz|igzip|gzip]> \\\n\n';
         printf 'Purpose: Fix R2 read FASTQ files for demultiplexing runs with 10x scATAC\n';
         printf '         and 10x multiome ATAC samples.\n\n';
         printf 'Parameters:\n';
-        printf '  - fastq: FASTQ input filename.\n';
+        printf '  - fastq_R2:   FASTQ R2 filename with 10x or HyDrop ATAC barcodes (gzipped).\n';
+        printf '  - check|fix:  Check if given FASTQ file contains 10x or HyDrop ATAC\n';
+        printf '                barcodes and optionally fix FASTQ files.\n'
         printf '  - compress_fastq_cmd:\n';
         printf '      - Compression program to use for output FASTQ files:\n';
         printf "          - \"bgzip\":  '%s'  (default)\n" "${compress_fastq_bgzip_cmd}";
@@ -55,13 +59,15 @@ fix_R2_read_10x_scATAC_and_10x_multiome_ATAC_fastq () {
         return 1;
     fi
 
-    if [ "${fastq_input_filename}" = "${fastq_input_filename%.gz}" ] ; then
-        printf 'Error: FASTQ file "%s" is not gzipped.\n' "${fastq_input_filename}";
+
+    # Detect if input FASTQ files are gzip compressed or not.
+    if [ "${fastq_R2_filename}" = "${fastq_R2_filename%.gz}" ] ; then
+        printf 'Error: FASTQ file "%s" is not gzipped.\n' "${fastq_R2_filename}";
         return 1;
     fi
 
-    if [ ! -e "${fastq_input_filename}" ] ; then
-        printf 'Error: FASTQ file "%s" does not exist.\n' "${fastq_input_filename}";
+    if [ ! -e "${fastq_R2_filename}" ] ; then
+        printf 'Error: FASTQ file "%s" does not exist.\n' "${fastq_R2_filename}";
         return 1;
     fi
 
@@ -100,17 +106,17 @@ fix_R2_read_10x_scATAC_and_10x_multiome_ATAC_fastq () {
 
     local is_scATAC_or_multiome_ATAC=$(
         mawk \
-            -v fastq_input_filename="${fastq_input_filename}" \
-            -v decompress_input_fastq_cmd="${decompress_fastq_gzipped_cmd}" \
+            -v fastq_R2_filename="${fastq_R2_filename}" \
+            -v decompress_fastq_cmd="${decompress_fastq_gzipped_cmd}" \
             -v compress_fastq_cmd="${compress_fastq_cmd}" \
         '
         BEGIN {
-            read_fastq_input_cmd = decompress_input_fastq_cmd " " fastq_input_filename;
+            read_fastq_R2_cmd = decompress_fastq_cmd " " fastq_R2_filename;
 
             fastq_line_number = 0;
 
             # Read FASTQ input file.
-            while ( (read_fastq_input_cmd | getline) > 0 ) {
+            while ( (read_fastq_R2_cmd | getline) > 0 ) {
                 fastq_line_number += 1;
                 fastq_part = fastq_line_number % 4;
 
@@ -169,37 +175,43 @@ fix_R2_read_10x_scATAC_and_10x_multiome_ATAC_fastq () {
 
     if [ "${is_scATAC_or_multiome_ATAC}" == "is_10x_scATAC" ] ; then
         local is_multiome_atac=0;
-        printf 'FASTQ "%s" contains R2 reads of 10x scATAC.\n' "${fastq_input_filename}";
+        printf 'FASTQ "%s" contains R2 reads of 10x scATAC.\n' "${fastq_R2_filename}";
     elif [ "${is_scATAC_or_multiome_ATAC}" == "is_10x_multiome_ATAC" ] ; then
         local is_multiome_atac=1;
-        printf 'FASTQ "%s" contains R2 reads of 10x scmultiome ATAC.\n' "${fastq_input_filename}";
+        printf 'FASTQ "%s" contains R2 reads of 10x scmultiome ATAC.\n' "${fastq_R2_filename}";
     else
         # Uncomment for debugging.
-        #printf 'FASTQ "%s" contains %s\n' "${fastq_input_filename}" "${is_scATAC_or_multiome_ATAC}";
+        #printf 'FASTQ "%s" contains %s\n' "${fastq_R2_filename}" "${is_scATAC_or_multiome_ATAC}";
 
         # Unknown: Do not modify the R2 read.
         return 0;
     fi
 
-    local fastq_output_temp_filename="${fastq_input_filename}.fixed.fq.gz";
+    if [ "${check_or_fix}" != "fix" ] ; then
+        # Quit here if "fix" was not requested and just report if the FASTQ files
+        # contained ScaleBio ATAC with 10x or HyDrop ATAC barcodes.
+        return 0;
+    fi
+
+    local fastq_R2_output_filename="${fastq_R2_filename}.fixed.fq.gz";
 
     mawk \
-        -v fastq_input_filename="${fastq_input_filename}" \
-        -v fastq_output_filename="${fastq_output_temp_filename}" \
-        -v decompress_input_fastq_cmd="${decompress_fastq_gzipped_cmd}" \
+        -v fastq_R2_filename="${fastq_R2_filename}" \
+        -v fastq_R2_output_filename="${fastq_R2_output_filename}" \
+        -v decompress_fastq_cmd="${decompress_fastq_gzipped_cmd}" \
         -v compress_fastq_cmd="${compress_fastq_cmd}" \
         -v is_multiome_atac="${is_multiome_atac}" \
         -F ' ' \
     '
     BEGIN {
-        read_fastq_input_cmd = decompress_input_fastq_cmd " " fastq_input_filename;
+        read_fastq_R2_cmd = decompress_fastq_cmd " " fastq_R2_filename;
 
-        write_fastq_output_cmd = compress_fastq_cmd " > " fastq_output_filename;
+        write_fastq_R2_cmd = compress_fastq_cmd " > " fastq_R2_output_filename;
 
         fastq_line_number = 0;
 
-        # Read FASTQ input file.
-        while ( (read_fastq_input_cmd | getline) > 0 ) {
+        # Read FASTQ R2 file (which contains the cell barcodes).
+        while ( (read_fastq_R2_cmd | getline) > 0 ) {
             fastq_line_number += 1;
             fastq_part = fastq_line_number % 4;
 
@@ -229,18 +241,18 @@ fix_R2_read_10x_scATAC_and_10x_multiome_ATAC_fastq () {
                 }
 
                 # Write the full FASTQ record to output FASTQ file.
-                print "@" read_name "\n" sequence "\n+\n" qual | write_fastq_output_cmd;
+                print "@" read_name "\n" sequence "\n+\n" qual | write_fastq_R2_cmd;
             }
         }
 
         # Close open file handles.
-        close(read_fastq_input_cmd);
-        close(write_fastq_output_cmd);
+        close(read_fastq_R2_cmd);
+        close(write_fastq_R2_cmd);
     }'
 
     if [ $? -eq 0 ] ; then
         # Rename fixed R2 FASTQ file to the original FASTQ R2 filename.
-        mv "${fastq_output_temp_filename}" "${fastq_input_filename}";
+        mv "${fastq_R2_output_filename}" "${fastq_R2_filename}";
     fi
 
     return $?
