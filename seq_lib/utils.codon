@@ -29,7 +29,7 @@ def is_index2_reverse_complemented(sequencing_machine_id: str) -> bool:
         kits, MiniSeq with Rapid Reagent kits, MiSeq, HiSeq 2500, and HiSeq 2000.
       - The reverse complement workflow is performed on the iSeq 100, MiniSeq with
         Standard reagent kits, NextSeq Systems, NovaSeq 6000 with v1.5 reagent kits,
-        HiSeq X, HiSeq 4000, and HiSeq 3000.
+        HiSeq X, HiSeq 4000, HiSeq 3000 and NovaSeq X.
 
     https://support-docs.illumina.com/SHARE/IndexedSeq/indexed-sequencing.pdf
 
@@ -44,8 +44,8 @@ def is_index2_reverse_complemented(sequencing_machine_id: str) -> bool:
             #  HiSeq3000, HiSeq4000, HiSeqX or NovaSeq6000 (v1.5 reagent kit).
             return True
     elif sequencing_machine_id_length == 7:
-        if sequencing_machine_id[0:2] in {"VH"}:
-            # NextSeq2000.
+        if sequencing_machine_id[0:2] in {"VH", "LH"}:
+            # NextSeq2000 or NovaSeqX.
             return True
     elif sequencing_machine_id_length == 8:
         if sequencing_machine_id[0:2] in {"NB", "NS", "MN"}:
