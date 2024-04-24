@@ -16,10 +16,10 @@ def get_orig_cb_idx_to_cb(barcodes_tsv_filename):
         barcodes_tsv_filename,
         separator="\t",
         has_header=False,
-        comment_char="#",
+        comment_prefix="#",
         columns=["column_1"],
         new_columns=["CB"],
-    ).with_row_count("CB_idx_orig", offset=1)
+    ).with_row_index("CB_idx_orig", offset=1)
 
     return cb_idx_orig_to_cb_df
 
@@ -74,7 +74,7 @@ def write_filtered_barcodes_and_matrix_mtx(
             on="CB_idx_orig",
         )
         # And create a new CB idx value for those selected CBs.
-        .with_row_count("CB_idx_new", offset=1)
+        .with_row_index("CB_idx_new", offset=1)
         .select(pl.col(["CB", "CB_idx_orig", "CB_idx_new"]))
     ).collect(streaming=True)
 

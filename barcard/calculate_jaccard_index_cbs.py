@@ -116,7 +116,7 @@ def calculate_jaccard_index_cbs(
             [
                 pl.col("per_CB1_count").first(),
                 pl.col("per_CB2_count").first(),
-                pl.count().alias("CB1_vs_CB2_intersection"),
+                pl.len().alias("CB1_vs_CB2_intersection"),
             ]
         )
         .with_columns(

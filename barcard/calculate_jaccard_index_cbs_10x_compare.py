@@ -92,7 +92,7 @@ def read_fragments_file(
         pumatac_barcodes_tsv_filename,
         has_header=False,
         separator="\t",
-        comment_char="#",
+        comment_prefix="#",
         new_columns=["CB"],
     )
 
@@ -134,7 +134,7 @@ def read_fragments_file(
             fragments_tsv_filename,
             has_header=False,
             separator="\t",
-            comment_char="#",
+            comment_prefix="#",
             new_columns=["chrom", "start", "end", "CB", "CB_count"],
         )
         .with_columns(

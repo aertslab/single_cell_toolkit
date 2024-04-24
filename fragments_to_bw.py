@@ -128,7 +128,7 @@ def read_bed_to_polars_df(
 
     # Enable global string cache so categorical columns from multiple Polars DataFrames
     # can be joined later, if necessary.
-    pl.enable_string_cache(True)
+    pl.enable_string_cache()
 
     if engine == "polars":
         # Read BED file with Polars.
@@ -238,7 +238,7 @@ def read_fragments_to_polars_df(
     ):
         fragments_df_pl = fragments_df_pl.groupby(
             ["Chromosome", "Start", "End", "Name"]
-        ).agg(pl.count().cast(pl.Int32()).alias("Score"))
+        ).agg(pl.len().cast(pl.Int32()).alias("Score"))
     else:
         fragments_df_pl = fragments_df_pl.with_columns(pl.col("Score").cast(pl.Int32()))
 
