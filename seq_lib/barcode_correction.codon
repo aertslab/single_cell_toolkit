@@ -396,7 +396,7 @@ def correct_bc_with_whitelist(
     """
     max_hamming_dist = (
         3
-        if not max_hamming_dist or max_hamming_dist == -1
+        if max_hamming_dist is None or max_hamming_dist == -1
         else max_hamming_dist
     )
 
@@ -446,7 +446,7 @@ def correct_bc_by_qual_order_with_whitelist(
 
     max_hamming_dist = (
         3
-        if not max_hamming_dist or max_hamming_dist == -1
+        if max_hamming_dist is None or max_hamming_dist == -1
         else max_hamming_dist
     )
 
@@ -489,7 +489,7 @@ def correct_bc_with_Ns_with_whitelist(
     """
     max_hamming_dist = (
         3
-        if not max_hamming_dist or max_hamming_dist == -1
+        if max_hamming_dist is None or max_hamming_dist == -1
         else max_hamming_dist
     )
 
