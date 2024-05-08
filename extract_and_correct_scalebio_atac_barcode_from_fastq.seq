@@ -372,7 +372,7 @@ def correct_tagmentation_and_hydrop_atac_bc_from_fastq(
 ):
     """
     Read ScaleBio index 2 FASTQ file with read name, tagmentation and HyDrop ATAC
-    barcodes and get raw tagmentation and 10x ATAC barcode sequences and qualities
+    barcodes and get raw tagmentation and HyDrop ATAC barcode sequences and qualities
     and corrected barcode sequences (if the barcode matches the whitelists (exactly
     or with max max_hamming_dist mismatch)).
 
@@ -380,8 +380,10 @@ def correct_tagmentation_and_hydrop_atac_bc_from_fastq(
     ----------
     tagmentation_bc_whitelist:
         Tagmentation barcode whitelist.
-    hydrop_atac_bc_whitelist:
-        HyDrop ATAC barcode whitelist.
+    hydrop_atac_full_bc_whitelist:
+        HyDrop ATAC full barcode whitelist (30bp).
+    hydrop_atac_partial_bc_whitelists:
+        List of 3 HyDrop ATAC partial barcode whitelists (3 x 10 bp).
     fastq_with_raw_bc_filename:
         Input FASTQ file with raw barcode reads.
     corrected_bc_filename:
@@ -417,16 +419,16 @@ def correct_tagmentation_and_hydrop_atac_bc_from_fastq(
         for tagmentation_bc in tagmentation_bc_whitelist
     }
 
-    # Store per tagmentation barcode the number of reads which also have a 10x ATAC
-    # barcode and for which the 10x ATAC barcode has hamming distance of 0, 1, 2 or 3
-    # from the 10x ATAC barcodes whitelist.
+    # Store per tagmentation barcode the number of reads which also have a HyDrop ATAC
+    # barcode and for which the HyDrop ATAC barcode has hamming distance of 0, 1, 2 or 3
+    # from the HyDrop ATAC barcodes whitelist.
     per_tagmentation_bc_and_with_hydrop_atac_bc_mismatches_stats = {
         str(tagmentation_bc): [0 , 0, 0, 0]
         for tagmentation_bc in tagmentation_bc_whitelist
     }
 
     # Store number of reads which have a HyDrop ATAC barcode with a hamming distance of
-    # 0, 1, 2 or 3 to the HyDrop RNA barcodes whitelist.
+    # 0, 1, 2 or 3 to the HyDrop ATAC barcodes whitelist.
     # As there are 3 subbarcodes, 9 mismatches in the theoretical maximum when hamming
     # distance of 3 is selected.
     hydrop_atac_bc_mismatches_stats = [0 , 0, 0, 0, 0, 0, 0, 0, 0, 0]
