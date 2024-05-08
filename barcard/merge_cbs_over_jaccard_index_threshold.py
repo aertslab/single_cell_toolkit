@@ -41,7 +41,7 @@ def merge_cbs_over_jaccard_index_threshold(
                 ),
             ]
         )
-        .groupby("CB1")
+        .group_by("CB1")
         .agg(
             [
                 # Get all CB2s that are linked to CB1.
@@ -99,7 +99,7 @@ def merge_cbs_over_jaccard_index_threshold(
                 pl.col("CB_count"),
             ]
         )
-        .groupby(["chrom", "start", "end", "CB"], maintain_order=True)
+        .group_by(["chrom", "start", "end", "CB"], maintain_order=True)
         .agg(
             [
                 # Combine counts for the same fragment for merged CBs.

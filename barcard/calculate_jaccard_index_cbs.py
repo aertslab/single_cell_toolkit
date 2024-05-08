@@ -107,7 +107,7 @@ def calculate_jaccard_index_cbs(
             pl.col("CB1")
             != pl.col("CB2")
         )
-        .groupby(["CB1", "CB2"])
+        .group_by(["CB1", "CB2"])
         .agg(
             # Get for each CB1:
             #   - total number of fragments with CB1s.
@@ -139,7 +139,7 @@ def calculate_jaccard_index_cbs(
             # Sort on CB1_CB2 and then on CB1 so the output is deterministic.
             by=["CB1_CB2", "CB1"],
         )
-        .groupby(["CB1_CB2"], maintain_order=True)
+        .group_by(["CB1_CB2"], maintain_order=True)
         .agg(
             # Only keep the first CB1 vs CB2 row (to avoid counting
             # the same overlap twice).

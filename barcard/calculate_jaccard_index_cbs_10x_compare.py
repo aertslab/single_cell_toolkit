@@ -231,7 +231,7 @@ def calculate_jaccard_index_cbs(
             how="outer",
             suffix="2",
         )
-        .groupby(["CB"])
+        .group_by(["CB"])
         .agg(
             [
                 #   - total number of fragments with CB1s and CBs2 (intersection).

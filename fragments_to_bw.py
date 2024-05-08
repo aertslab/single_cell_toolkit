@@ -236,7 +236,7 @@ def read_fragments_to_polars_df(
         "Score" not in fragments_df_pl.columns
         or fragments_df_pl.schema["Score"] == pl.Utf8
     ):
-        fragments_df_pl = fragments_df_pl.groupby(
+        fragments_df_pl = fragments_df_pl.group_by(
             ["Chromosome", "Start", "End", "Name"]
         ).agg(pl.len().cast(pl.Int32()).alias("Score"))
     else:
