@@ -35,7 +35,7 @@ compress_fastq_gzip_cmd="gzip -${compress_fastq_level} -c";
 
 fix_sra_fastq () {
     local fastq_input_filename="${1}";
-    local fastq_output_fi.lename="${2}";
+    local fastq_output_filename="${2}";
     local compress_fastq_cmd="${3:-bgzip}";
 
     if [ ${#@} -lt 2 ] ; then
