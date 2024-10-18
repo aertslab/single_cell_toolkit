@@ -23,12 +23,25 @@ mapping_stats () {
     #           samtools view -c -F 0x4 -F 0x100 -F 0x800 -e '! [XA] && ! [SA]' "${bam}"
     #       - Fraction of total read pairs mapped confidently to genome (>30 mapq):
     #           samtools view -c -F 0x4 -F 0x100 -F 0x800 -q 30 "${bam}"
+    #       - Filter BAM file similar as create_fragments_file but with SAMtools new expression syntax.
+    #           samtools view -c --expr 'flag.proper_pair && !flag.secondary && !flag.supplementary && refid == mrefid && (tlen >= 10 || tlen <= -10) && mapq >= 30 && [MQ] >= 30 && [CB]' "${bam}"
+    #
+    #           Count read if and only if:
+    #             - read is properly paired.
+    #             - read is primary alignment.
+    #             - read and its pair are located on the same chromosome.
+    #             - read and its pair have a mapping quality of 30 or higher.
+    #             - insert size is at least 10 in absolute value.
+    #             - mapping quality is >=30 and mate mapping quality is >=30.
+    #             - read has an associated CB tag.
     #   - Only use threads for "samtools stat". Using it with any of the other samtools commands
     #     makes everything slower than not using any threads at all.
+
     samtools view -u "${bam}" \
       | tee \
             >(samtools view -c -F 0x4 -F 0x100 -F 0x800 -e '! [XA] && ! [SA]' - > "${output_dir}/${sample_id}.uniquely_mapped_reads.txt") \
             >(samtools view -c -F 0x4 -F 0x100 -F 0x800 -q 30 - > "${output_dir}/${sample_id}.fraction_total_read_pairs.txt") \
+            >(samtools view -c --expr 'flag.proper_pair && !flag.secondary && !flag.supplementary && refid == mrefid && (tlen >= 10 || tlen <= -10) && mapq >= 30 && [MQ] >= 30 && [CB]' - > "${output_dir}/${sample_id}.reads_used_for_fragments_file.txt") \
       | samtools stat -@ 2 - > "${output_dir}/${sample_id}.stat"
 
     # Create one output file with combined mapping statistics from 3 samtools invocations:
@@ -51,12 +64,16 @@ mapping_stats () {
 
         printf "reads mapped with MAPQ>30\t";
         cat "${output_dir}/${sample_id}.fraction_total_read_pairs.txt";
+
+        printf "reads used to create fragments file\t";
+        cat "${output_dir}/${sample_id}.reads_used_for_fragments_file.txt";
     ) > "${output_dir}/${sample_id}.mapping_stats.tsv";
 
     rm \
         "${output_dir}/${sample_id}.stat" \
         "${output_dir}/${sample_id}.uniquely_mapped_reads.txt" \
-        "${output_dir}/${sample_id}.fraction_total_read_pairs.txt";
+        "${output_dir}/${sample_id}.fraction_total_read_pairs.txt" \
+        "${output_dir}/${sample_id}.reads_used_for_fragments_file.txt";
 }
 
 
