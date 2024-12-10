@@ -493,6 +493,13 @@ fn split_bams_per_cluster(
                     for (i, result) in bam_reader.records().enumerate() {
                         let record = result?;
 
+                        if record.reference_sequence_id().is_none() {
+                            continue;
+                        }
+                        if record.alignment_start().is_none() {
+                            continue;
+                        }
+
                         // Keep only read that will be used to create scATAC-seq fragment or all
                         // reads, depending on the settings.
                         let keep_read = match fragment_reads_only {
@@ -530,13 +537,6 @@ fn split_bams_per_cluster(
 
                         if !keep_read {
                             // Skip unwanted reads.
-                            continue;
-                        }
-
-                        if record.reference_sequence_id().is_none() {
-                            continue;
-                        }
-                        if record.alignment_start().is_none() {
                             continue;
                         }
 
