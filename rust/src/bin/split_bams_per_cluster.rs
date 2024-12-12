@@ -83,6 +83,17 @@ struct Cli {
         \u{20} - read is primary alignment."
     )]
     fragment_reads_only: bool,
+    #[arg(
+        short = 'C',
+        long = "chunk_size",
+        required = false,
+        default_value_t = 10_000_000,
+        help = "Fetch reads from each BAM file in chunks of X reads. Default: 10_000_000.",
+        long_help = "Fetch reads from each BAM file for each cluster in chunks of X reads\n\
+        (default: 10_000_000) and sort them by position.\n\
+        Reduce this value if split_bams_per_cluster uses too much memory."
+    )]
+    chunk_size: i64,
 }
 
 // Sample name to BAM filename TSV record.
@@ -242,6 +253,7 @@ fn split_bams_per_cluster(
     sample_to_cb_input_to_cb_output_and_cluster_mapping: &SampleToCellBarcodeInputToCellBarcodeOutputAndClusterMapping,
     output_prefix: &Path,
     fragment_reads_only: bool,
+    chunk_size: i64,
     cmd_line_str: &str,
 ) -> Result<(), Box<dyn Error>> {
     let mut bam_file_to_bam_reader_and_header_mapping = BamFileToBamReaderAndHeaderMapping::new();
@@ -421,8 +433,6 @@ fn split_bams_per_cluster(
         .filter(|(k, _v)| bam_file_to_bam_reader_and_header_mapping.get(*k).is_some())
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
-
-    let chunk_size: i64 = 10_000_000;
 
     // Loop over each chromosome and fetch reads in chunks from each BAM file and sort
     // them by position before writing them to the per cluster BAM file.
@@ -708,6 +718,7 @@ fn main() {
         &sample_to_cb_input_to_cb_output_and_cluster_mapping,
         &cli.output_prefix,
         cli.fragment_reads_only,
+        cli.chunk_size,
         &cmd_line_str,
     ) {
         Ok(()) => (),
