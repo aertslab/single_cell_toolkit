@@ -213,33 +213,39 @@ fn get_non_hd_sq_and_fix_pg_bam_header_lines(header: &Header, sample: &str) -> V
         .split(|x| x == &b'\n')
         .filter(|x| !x.is_empty() && !x.starts_with(b"@HD\t") && !x.starts_with(b"@SQ\t"))
         .map(Vec::<u8>::from)
-        .map(|x| match x.starts_with(b"@PG\t") {
-            true => {
-                // Split "@PG" line by tab and add sample name to "ID" and "PP" fields
-                // to make them unique over all sample BAM files.
-                x.split(|x| x == &b'\t')
-                    .map(|x| match x.starts_with(b"ID:") {
-                        true => {
-                            // Add sample name to "ID" field in "@PG" line.
-                            let mut id_field = Vec::<u8>::from(x);
-                            id_field.extend(format!(".{}", &sample).into_bytes());
-                            id_field
-                        }
-                        false => x.to_vec(),
-                    })
-                    .map(|x| match x.starts_with(b"PP:") {
-                        true => {
-                            // Add sample name to "PP" field in "@PG" line.
-                            let mut pp_field = x;
-                            pp_field.extend(format!(".{}", &sample).into_bytes());
-                            pp_field
-                        }
-                        false => x.to_vec(),
-                    })
-                    .collect::<Vec<Vec<u8>>>()
-                    .join(&b'\t')
+        .map(|x| {
+            match x.starts_with(b"@PG\t") {
+                true => {
+                    // Split "@PG" line by tab and add sample name to "ID" and "PP" fields
+                    // to make them unique over all sample BAM files.
+                    x.split(|x| x == &b'\t')
+                        .map(|x| {
+                            match x.starts_with(b"ID:") {
+                                true => {
+                                    // Add sample name to "ID" field in "@PG" line.
+                                    let mut id_field = Vec::<u8>::from(x);
+                                    id_field.extend(format!(".{}", &sample).into_bytes());
+                                    id_field
+                                }
+                                false => x.to_vec(),
+                            }
+                        })
+                        .map(|x| {
+                            match x.starts_with(b"PP:") {
+                                true => {
+                                    // Add sample name to "PP" field in "@PG" line.
+                                    let mut pp_field = x;
+                                    pp_field.extend(format!(".{}", &sample).into_bytes());
+                                    pp_field
+                                }
+                                false => x.to_vec(),
+                            }
+                        })
+                        .collect::<Vec<Vec<u8>>>()
+                        .join(&b'\t')
+                }
+                false => x,
             }
-            false => x,
         })
         .collect::<Vec<Vec<u8>>>()
         .join(&b"\n"[..])
