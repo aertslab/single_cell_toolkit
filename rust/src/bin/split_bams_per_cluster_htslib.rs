@@ -9,7 +9,7 @@ use hashbrown::{HashMap, HashSet};
 use rayon::prelude::*;
 
 use itertools::Itertools;
-use num_iter::range_step;
+use num_iter::range_step_inclusive;
 
 use rust_htslib::bam::{
     record::Aux, CompressionLevel, Format, Header, HeaderView, IndexedReader, Read, Record, Writer,
@@ -70,6 +70,17 @@ struct Cli {
         \u{20} - read is primary alignment."
     )]
     fragment_reads_only: bool,
+    #[arg(
+        short = 'C',
+        long = "chunk_size",
+        required = false,
+        default_value_t = 1_000_000,
+        help = "Fetch reads from each BAM file in chunks of X bp. Default: 1_000_000.",
+        long_help = "Fetch reads from each BAM file for each cluster in chunks of X bp\n\
+        (default: 1_000_000) and sort them by position.\n\
+        Reduce this value if split_bams_per_cluster_htslib uses too much memory."
+    )]
+    chunk_size: u64,
 }
 
 // Sample name to BAM filename TSV record.
@@ -257,6 +268,7 @@ fn split_bams_per_cluster(
     sample_to_cb_input_to_cb_output_and_cluster_mapping: &SampleToCellBarcodeInputToCellBarcodeOutputAndClusterMapping,
     output_prefix: &Path,
     fragment_reads_only: bool,
+    chunk_size: u64,
     cmd_line_str: &str,
 ) -> Result<(), Box<dyn Error>> {
     let bam_thread_pool = ThreadPool::new(16)?;
@@ -388,7 +400,12 @@ fn split_bams_per_cluster(
         let chrom_end = merged_header_view.target_len(tid).unwrap();
 
         // Fetch reads from each BAM file for each cluster in chunks of 10_000_000 bp and sort them by position.
-        for (start, end) in range_step(0, chrom_end, 1_000_000).tuple_windows() {
+        for (start, end) in
+            range_step_inclusive(0, chrom_end + chunk_size - 1, chunk_size).tuple_windows()
+        {
+            // Make sure that the end of the chunk is not larger than the end of the chromosome.
+            let end = if end > chrom_end { chrom_end } else { end };
+
             let start = start as i64;
             let end = end as i64;
 
@@ -398,6 +415,7 @@ fn split_bams_per_cluster(
                     let indexed_input_bam = bam_file_to_bam_indexed_reader_mapping
                         .get_mut(bam_filename)
                         .unwrap();
+                    // Fetch chunk from current BAM file (coordinates are 0-based, and end is exclusive).
                     indexed_input_bam.fetch((tid, start, end))?;
 
                     let sample_to_cb_input_to_cb_output_and_cluster_mapping =
@@ -560,6 +578,7 @@ fn main() {
         &sample_to_cb_input_to_cb_output_and_cluster_mapping,
         &cli.output_prefix,
         cli.fragment_reads_only,
+        cli.chunk_size,
         &cmd_line_str,
     ) {
         Ok(()) => (),
