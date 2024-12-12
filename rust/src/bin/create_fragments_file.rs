@@ -62,7 +62,7 @@ struct Fragment {
 
 // Write fragment with fragment counts fast to a BGZF compressed file.
 fn write_fragment(
-    fragments_file_writer: &mut bgzf::MultithreadedWriter,
+    fragments_file_writer: &mut bgzf::MultithreadedWriter<File>,
     fragment: &Fragment,
     fragment_count: usize,
 ) {
