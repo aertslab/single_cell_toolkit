@@ -71,6 +71,15 @@ struct Cli {
     )]
     fragment_reads_only: bool,
     #[arg(
+        long = "ignore_mate_mapping_quality",
+        required = false,
+        help = "Ignore mate mapping quality when filtering reads with `--fragment_reads_only`.",
+        long_help = "Ignore mate mapping quality when filtering reads with `--fragment_reads_only`.\n\
+        Use this option if reads do not contain a `MQ` tag.\n\
+        `MQ` tags can be added to reads with `samtools fixmate -m`."
+    )]
+    ignore_mate_mapping_quality: bool,
+    #[arg(
         short = 'C',
         long = "chunk_size",
         required = false,
@@ -268,6 +277,7 @@ fn split_bams_per_cluster(
     sample_to_cb_input_to_cb_output_and_cluster_mapping: &SampleToCellBarcodeInputToCellBarcodeOutputAndClusterMapping,
     output_prefix: &Path,
     fragment_reads_only: bool,
+    ignore_mate_mapping_quality: bool,
     chunk_size: u64,
     cmd_line_str: &str,
 ) -> Result<(), Box<dyn Error>> {
@@ -454,22 +464,27 @@ fn split_bams_per_cluster(
                                     && !record.is_secondary()
                                     && !record.is_supplementary()
                                 {
-                                    if let Ok(mate_mapq_aux) = record.aux(b"MQ") {
-                                        // So far MQ tags in BAM files have been of I8 or U8 type.
-                                        let mate_mapq = match mate_mapq_aux {
-                                            Aux::I8(mate_mapq) => mate_mapq as i32,
-                                            Aux::I16(mate_mapq) => mate_mapq as i32,
-                                            Aux::I32(mate_mapq) => mate_mapq,
-                                            Aux::U8(mate_mapq) => mate_mapq as i32,
-                                            Aux::U16(mate_mapq) => mate_mapq as i32,
-                                            Aux::U32(mate_mapq) => mate_mapq as i32,
-                                            _ => -1, // bail!("Value for MQ tag is not an integer."),
-                                        };
+                                    if !ignore_mate_mapping_quality {
+                                        if let Ok(mate_mapq_aux) = record.aux(b"MQ") {
+                                            // So far MQ tags in BAM files have been of I8 or U8 type.
+                                            let mate_mapq = match mate_mapq_aux {
+                                                Aux::I8(mate_mapq) => mate_mapq as i32,
+                                                Aux::I16(mate_mapq) => mate_mapq as i32,
+                                                Aux::I32(mate_mapq) => mate_mapq,
+                                                Aux::U8(mate_mapq) => mate_mapq as i32,
+                                                Aux::U16(mate_mapq) => mate_mapq as i32,
+                                                Aux::U32(mate_mapq) => mate_mapq as i32,
+                                                _ => -1, // bail!("Value for MQ tag is not an integer."),
+                                            };
 
-                                        if mate_mapq >= 30 {
-                                            // Keep current BAM record.
-                                            keep_read = true;
+                                            if mate_mapq >= 30 {
+                                                // Keep current BAM record.
+                                                keep_read = true;
+                                            }
                                         }
+                                    } else {
+                                        // Keep current BAM record regardless of mate mapping quality.
+                                        keep_read = true;
                                     }
                                 }
 
@@ -578,6 +593,7 @@ fn main() {
         &sample_to_cb_input_to_cb_output_and_cluster_mapping,
         &cli.output_prefix,
         cli.fragment_reads_only,
+        cli.ignore_mate_mapping_quality,
         cli.chunk_size,
         &cmd_line_str,
     ) {

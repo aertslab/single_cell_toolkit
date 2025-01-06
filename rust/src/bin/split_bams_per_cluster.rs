@@ -133,7 +133,7 @@ type BamFileToBamReaderAndHeaderMapping =
     HashMap<String, (bam::io::Reader<bgzf::MultithreadedReader<File>>, SamHeader)>;
 
 type ClusterToBamWriterAndHeaderMapping =
-    HashMap<String, (bam::io::Writer<bgzf::MultithreadedWriter>, SamHeader)>;
+    HashMap<String, (bam::io::Writer<bgzf::MultithreadedWriter<File>>, SamHeader)>;
 
 fn read_sample_to_bam_tsv_file(
     sample_to_bam_tsv_path: &Path,
