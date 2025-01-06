@@ -127,6 +127,22 @@ type SampleToCellBarcodeInputToCellBarcodeOutputAndClusterMapping =
 type BamFileToBamIndexedReaderMapping = HashMap<String, IndexedReader>;
 type ClusterToBamWriterMapping = HashMap<String, Writer>;
 
+trait ContainsSlice<T> : PartialEq<[T]> {
+    fn contains_slice (self: &'_ Self, slice: &'_ [T]) -> bool;
+}
+
+impl<T, Item : PartialEq<T>> ContainsSlice<T> for [Item] {
+    fn contains_slice (self: &'_ [Item], slice: &'_ [T]) -> bool
+    {
+        let len = slice.len();
+        if len == 0 {
+            return true;
+        }
+        self.windows(len)
+            .any(move |sub_slice| sub_slice == slice)
+    }
+}
+
 fn read_sample_to_bam_tsv_file(
     sample_to_bam_tsv_path: &Path,
 ) -> Result<BamToSampleBTreeMapping, Box<dyn Error>> {
@@ -224,6 +240,26 @@ fn get_hd_and_sq_bam_header_lines(header: &Header) -> Vec<u8> {
         .join(&b"\n"[..])
 }
 
+fn get_hd_coordinate_sorted_bam_header_lines(header: &Header) -> bool {
+    // Only keep "@HD" and "@SQ" lines from BAM header.
+    header
+        .to_bytes()
+        .split(|x| x == &b'\n')
+        .filter(|x| !x.is_empty() && (x.starts_with(b"@HD\t") && x.contains_slice(b"\tSO:coordinate")))
+        .collect::<Vec<_>>()
+        .is_empty()
+}
+
+fn get_sq_bam_header_lines(header: &Header) -> Vec<u8> {
+    // Only keep "@HD" and "@SQ" lines from BAM header.
+    header
+        .to_bytes()
+        .split(|x| x == &b'\n')
+        .filter(|x| !x.is_empty() && (x.starts_with(b"@SQ\t")))
+        .collect::<Vec<_>>()
+        .join(&b"\n"[..])
+}
+
 fn get_non_hd_sq_and_fix_pg_bam_header_lines(header: &Header, sample: &str) -> Vec<u8> {
     // Only keep non-"@HD" and non-"@SQ" lines (@PG and @CO lines) from
     // BAM header and make "ID" and "PP" fields in "@PG" lines unique,
@@ -314,6 +350,7 @@ fn split_bams_per_cluster(
         // Create merged BAM header per cluster BAM file.
         let mut merged_header = Vec::new();
         let mut hd_and_sq_bam_header_lines: Option<Vec<u8>> = None;
+        let mut sq_bam_header_lines: Option<Vec<u8>> = None;
 
         bam_filenames.iter().enumerate().try_for_each(|(i, bam_filename)| {
             let bam = bam_file_to_bam_indexed_reader_mapping
@@ -331,15 +368,26 @@ fn split_bams_per_cluster(
             // lines in the first sample BAM file.
             match i {
                 0 => {
+                    if get_hd_coordinate_sorted_bam_header_lines(&original_header) {
+                        Err(format!("BAM file \"{}\" for cluster \"{}\" is not coordinate sorted.", bam_filename, cluster))?
+                    }
+
                     hd_and_sq_bam_header_lines =
                         Some(get_hd_and_sq_bam_header_lines(&original_header));
                     merged_header.extend(&hd_and_sq_bam_header_lines.clone().unwrap());
+
+                    sq_bam_header_lines =
+                        Some(get_sq_bam_header_lines(&original_header));
                 }
                 _ => {
-                    if get_hd_and_sq_bam_header_lines(&original_header)
-                        != hd_and_sq_bam_header_lines.clone().unwrap()
+                    if get_hd_coordinate_sorted_bam_header_lines(&original_header) {
+                        Err(format!("BAM file \"{}\" for cluster \"{}\" is not coordinate sorted.", bam_filename, cluster))?
+                    }
+
+                    if get_sq_bam_header_lines(&original_header)
+                        != sq_bam_header_lines.clone().unwrap()
                     {
-                        Err(format!("BAM files for cluster \"{}\" have different sorting or chromosome order.", cluster))?
+                        Err(format!("BAM file \"{}\" for cluster \"{}\" has different chromosome order.", bam_filename, cluster))?
                     }
                 }
             }
