@@ -58,6 +58,15 @@ struct Cli {
     )]
     output_prefix: PathBuf,
     #[arg(
+        long = "chroms",
+        num_args(0..),
+        required = false,
+        help = "List of chromosome names to keep reads for in the output BAM files.",
+        long_help = "List of chromosome names to keep reads for in the output BAM files.\n\
+        If not specified, keep reads for all chromosomes in the output BAM files."
+    )]
+    chromosomes: Option<Vec<String>>,
+    #[arg(
         short = 'f',
         long = "fragment_reads_only",
         required = false,
@@ -312,6 +321,7 @@ fn split_bams_per_cluster(
     cluster_to_samples_mapping: &ClusterToSamplesMapping,
     sample_to_cb_input_to_cb_output_and_cluster_mapping: &SampleToCellBarcodeInputToCellBarcodeOutputAndClusterMapping,
     output_prefix: &Path,
+    chromosomes: &Option<Vec<String>>,
     fragment_reads_only: bool,
     ignore_mate_mapping_quality: bool,
     chunk_size: u64,
@@ -455,6 +465,13 @@ fn split_bams_per_cluster(
     // Loop over each chromosome and fetch reads in chunks from each BAM file and sort
     // them by position before writing them to the per cluster BAM file.
     for tid in 0..merged_header_view.target_count() {
+        let chrom_name = std::str::from_utf8(merged_header_view.tid2name(tid)).expect("Chromosome name is not valid UTF-8.").to_string();
+        if chromosomes.is_some() {
+            if ! chromosomes.as_ref().unwrap().contains(&chrom_name) {
+                continue;
+            }
+        }
+
         let chrom_end = merged_header_view.target_len(tid).unwrap();
 
         // Fetch reads from each BAM file for each cluster in chunks of 10_000_000 bp and sort them by position.
@@ -589,7 +606,7 @@ fn split_bams_per_cluster(
                 .try_for_each(|(cluster, cluster_bam_records)| {
                     println!(
                         "Writing chunk {}:{}-{} for cluster {}",
-                        tid, start, end, cluster
+                        chrom_name, start, end, cluster
                     );
                     let cluster_bam_writer =
                         cluster_to_bam_writer_mapping.get_mut(cluster).unwrap();
@@ -640,6 +657,7 @@ fn main() {
         &cluster_to_samples_mapping,
         &sample_to_cb_input_to_cb_output_and_cluster_mapping,
         &cli.output_prefix,
+        &cli.chromosomes,
         cli.fragment_reads_only,
         cli.ignore_mate_mapping_quality,
         cli.chunk_size,
