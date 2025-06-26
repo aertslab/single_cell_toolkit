@@ -136,19 +136,17 @@ type SampleToCellBarcodeInputToCellBarcodeOutputAndClusterMapping =
 type BamFileToBamIndexedReaderMapping = HashMap<String, IndexedReader>;
 type ClusterToBamWriterMapping = HashMap<String, Writer>;
 
-trait ContainsSlice<T> : PartialEq<[T]> {
-    fn contains_slice (self: &'_ Self, slice: &'_ [T]) -> bool;
+trait ContainsSlice<T>: PartialEq<[T]> {
+    fn contains_slice(self: &'_ Self, slice: &'_ [T]) -> bool;
 }
 
-impl<T, Item : PartialEq<T>> ContainsSlice<T> for [Item] {
-    fn contains_slice (self: &'_ [Item], slice: &'_ [T]) -> bool
-    {
+impl<T, Item: PartialEq<T>> ContainsSlice<T> for [Item] {
+    fn contains_slice(self: &'_ [Item], slice: &'_ [T]) -> bool {
         let len = slice.len();
         if len == 0 {
             return true;
         }
-        self.windows(len)
-            .any(move |sub_slice| sub_slice == slice)
+        self.windows(len).any(move |sub_slice| sub_slice == slice)
     }
 }
 
@@ -254,7 +252,9 @@ fn get_hd_coordinate_sorted_bam_header_lines(header: &Header) -> bool {
     header
         .to_bytes()
         .split(|x| x == &b'\n')
-        .filter(|x| !x.is_empty() && (x.starts_with(b"@HD\t") && x.contains_slice(b"\tSO:coordinate")))
+        .filter(|x| {
+            !x.is_empty() && (x.starts_with(b"@HD\t") && x.contains_slice(b"\tSO:coordinate"))
+        })
         .collect::<Vec<_>>()
         .is_empty()
 }
@@ -465,9 +465,11 @@ fn split_bams_per_cluster(
     // Loop over each chromosome and fetch reads in chunks from each BAM file and sort
     // them by position before writing them to the per cluster BAM file.
     for tid in 0..merged_header_view.target_count() {
-        let chrom_name = std::str::from_utf8(merged_header_view.tid2name(tid)).expect("Chromosome name is not valid UTF-8.").to_string();
+        let chrom_name = std::str::from_utf8(merged_header_view.tid2name(tid))
+            .expect("Chromosome name is not valid UTF-8.")
+            .to_string();
         if chromosomes.is_some() {
-            if ! chromosomes.as_ref().unwrap().contains(&chrom_name) {
+            if !chromosomes.as_ref().unwrap().contains(&chrom_name) {
                 continue;
             }
         }
