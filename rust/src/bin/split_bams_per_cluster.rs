@@ -129,11 +129,22 @@ type CellBarcodeInputToCellBarcodeOutputAndClusterMapping =
 type SampleToCellBarcodeInputToCellBarcodeOutputAndClusterMapping =
     HashMap<String, CellBarcodeInputToCellBarcodeOutputAndClusterMapping>;
 
-type BamFileToBamReaderAndHeaderMapping =
-    HashMap<String, (bam::io::Reader<bgzf::MultithreadedReader<File>>, SamHeader)>;
+type BamFileToBamReaderAndHeaderMapping = HashMap<
+    String,
+    (
+        bam::io::Reader<bgzf::io::MultithreadedReader<File>>,
+        SamHeader,
+    ),
+>;
 
-type ClusterToBamWriterAndHeaderMapping =
-    HashMap<String, (bam::io::Writer<bgzf::MultithreadedWriter<File>>, SamHeader)>;
+type ClusterToBamWriterAndHeaderMapping = HashMap<
+    String,
+    (
+        bam::io::Writer<bgzf::io::MultithreadedWriter<File>>,
+        SamHeader,
+    ),
+>;
+
 
 fn read_sample_to_bam_tsv_file(
     sample_to_bam_tsv_path: &Path,
@@ -228,7 +239,7 @@ fn fix_pg_bam_header_lines<'a>(
     sample_id: &'a str,
 ) -> HeaderBuilder {
     // Add sample name to "ID" and "PP" fields to make them unique over all sample BAM files.
-    for (program_id, mut program_map) in header.programs().clone() {
+    for (program_id, mut program_map) in header.programs().as_ref().clone() {
         // Add sample name to "ID" field in "@PG" line.
         let mut program_id = program_id.clone();
 
@@ -303,7 +314,7 @@ fn split_bams_per_cluster(
                     let bam_decompressing_worker_threads = NonZeroUsize::new(4).unwrap();
                     let bam_file = File::open(bam_filename)?;
 
-                    let bam_bgzf_reader = bgzf::MultithreadedReader::with_worker_count(
+                    let bam_bgzf_reader = bgzf::io::MultithreadedReader::with_worker_count(
                         bam_decompressing_worker_threads,
                         bam_file,
                     );
@@ -351,7 +362,7 @@ fn split_bams_per_cluster(
             }
 
             // Add "@PG"" lines from each BAM file to merged header.
-            if !header.programs().is_empty() {
+            if !header.programs().as_ref().is_empty() {
                 cluster_bam_header_builder =
                     fix_pg_bam_header_lines(cluster_bam_header_builder, &header, sample_id);
             }
@@ -396,10 +407,10 @@ fn split_bams_per_cluster(
         // of bgzip of HTSlib (which has libdeflate level 7 mapped to level 6:
         // https://github.com/samtools/htslib/pull/1488).
         let cluster_bam_file = File::create(cluster_bam_path)?;
-        let compression_level = bgzf::writer::CompressionLevel::try_from(7)?;
+        let compression_level = bgzf::io::writer::CompressionLevel::try_from(7)?;
         let cluster_bam_compressing_worker_threads = NonZeroUsize::new(3).unwrap();
 
-        let mut cluster_bam_bgzf_writer = bgzf::multithreaded_writer::Builder::default()
+        let mut cluster_bam_bgzf_writer = bgzf::io::multithreaded_writer::Builder::default()
             .set_compression_level(compression_level)
             .set_worker_count(cluster_bam_compressing_worker_threads)
             .build_from_writer(cluster_bam_file);
@@ -625,28 +636,8 @@ fn split_bams_per_cluster(
                 });
 
             // Write sorted reads to per cluster BAM files.
-            // cluster_to_bam_records
-            //     .iter_mut()
-            //     .try_for_each(|(cluster, cluster_bam_records)| {
-            //         println!(
-            //             "Writing chunk {}:{}-{} for cluster {}",
-            //             reference_sequence_id, start, end, cluster
-            //         );
-            //         let (cluster_bam_writer, cluster_header) =
-            //             cluster_to_bam_writer_and_header_mapping
-            //                 .get_mut(cluster)
-            //                 .unwrap();
-
-            //         for record in cluster_bam_records.iter() {
-            //             cluster_bam_writer.write_alignment_record(&cluster_header, record)?;
-            //         }
-
-            //         cluster_bam_records.clear();
-
-            //         Ok::<_, Box<dyn std::error::Error>>(())
-            //     })?;
             cluster_to_bam_records
-                .par_iter_mut()
+                .iter_mut()
                 .try_for_each(|(cluster, cluster_bam_records)| {
                     println!(
                         "Writing chunk {}:{}-{} for cluster {}",
@@ -658,16 +649,13 @@ fn split_bams_per_cluster(
                             .unwrap();
 
                     for record in cluster_bam_records.iter() {
-                        cluster_bam_writer
-                            .write_alignment_record(&cluster_header, record)
-                            .unwrap();
+                        cluster_bam_writer.write_alignment_record(&cluster_header, record)?;
                     }
 
                     cluster_bam_records.clear();
 
-                    Ok::<_, Box<dyn std::error::Error + Send>>(())
-                })
-                .unwrap();
+                    Ok::<_, Box<dyn std::error::Error>>(())
+                })?;
         }
     }
 
