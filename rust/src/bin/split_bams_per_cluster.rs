@@ -55,7 +55,7 @@ struct Cli {
         long = "cluster_cb_sample",
         required = true,
         help = "Cluster to original cell barcode, new cell barcode and sample name mapping TSV file.",
-        long_help = "Cluster too original cell barcode, new cell barcode and sample name mapping TSV file consisting of 4 columns:\n\
+        long_help = "Cluster to original cell barcode, new cell barcode and sample name mapping TSV file consisting of 4 columns:\n\
         \u{20} 1) cluster: cluster\n\
         \u{20} 2) cell_barcode_input: input cell barcode (as written in input BAM files)\n\
         \u{20} 3) cell_barcode_output: output cell barcode (as to be written to output cluster BAM file)\n\
