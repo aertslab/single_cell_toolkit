@@ -253,6 +253,7 @@ def main():
             fastq_with_raw_bc_filename=fastq_with_raw_bc_filename,
             corrected_bc_filename=corrected_bc_filename,
             corrected_bc_stats_tsv_filename=corrected_bc_stats_tsv_filename,
+            bc_suffix=bc_suffix,
             max_hamming_dist=max_mismatches,
             min_frac_bcs_to_find=min_frac_bcs_to_find,
         )
