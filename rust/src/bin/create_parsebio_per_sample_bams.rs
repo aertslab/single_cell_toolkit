@@ -148,20 +148,16 @@ fn fix_chromosome_names_in_bam_header(header: &Header) -> Vec<u8> {
         .to_bytes()
         .split(|x| x == &b'\n')
         .filter(|x| !x.is_empty() && (x.starts_with(b"@HD\t") || x.starts_with(b"@SQ\t")))
-        .map(|x| {
-            match x.starts_with(b"@SQ\tSN:") {
-                true => {
-                    match x[7..].strip_prefix(b"hg38_") {
-                        Some(y) => {
-                            let mut sq_line = b"@SQ\tSN:".to_vec();
-                            sq_line.extend(Vec::<u8>::from(y));
-                            sq_line
-                        }
-                        None => Vec::<u8>::from(x),
-                    }
+        .map(|x| match x.starts_with(b"@SQ\tSN:") {
+            true => match x[7..].strip_prefix(b"hg38_") {
+                Some(y) => {
+                    let mut sq_line = b"@SQ\tSN:".to_vec();
+                    sq_line.extend(Vec::<u8>::from(y));
+                    sq_line
                 }
-                false => Vec::<u8>::from(x),
-            }
+                None => Vec::<u8>::from(x),
+            },
+            false => Vec::<u8>::from(x),
         })
         .collect::<Vec<Vec<u8>>>()
         .join(&b"\n"[..])
@@ -175,16 +171,14 @@ fn filter_bam_header(header: &Header, sublibrary: &str) -> Vec<u8> {
         .split(|x| x == &b'\n')
         .filter(|x| !x.is_empty() && !x.starts_with(b"@HD\t") && !x.starts_with(b"@SQ\t"))
         .map(Vec::<u8>::from)
-        .map(|x| {
-            match x.starts_with(b"@PG\tID:STAR") {
-                true => {
-                    let mut pg_line = Vec::<u8>::from(&x[..11]);
-                    pg_line.extend(format!(".{}", &sublibrary).into_bytes());
-                    pg_line.extend(Vec::<u8>::from(&x[11..]));
-                    pg_line
-                }
-                false => x,
+        .map(|x| match x.starts_with(b"@PG\tID:STAR") {
+            true => {
+                let mut pg_line = Vec::<u8>::from(&x[..11]);
+                pg_line.extend(format!(".{}", &sublibrary).into_bytes());
+                pg_line.extend(Vec::<u8>::from(&x[11..]));
+                pg_line
             }
+            false => x,
         })
         .collect::<Vec<Vec<u8>>>()
         .join(&b"\n"[..])
