@@ -122,16 +122,20 @@ fn bam_update_cell_barcode(
 
             if let Some(new_bc) = new_bc {
                 if is_same_bc_tag {
-                    // Remove existing CB tag and value if the new one has the same tag name.
-                    record.remove_aux(old_bc_tag)?;
+                    // Update existing CB tag and value if the new one has the same tag name.
+                    record.update_aux(new_bc_tag, Aux::String(&new_bc))?;
                 } else if let Ok(_new_bc_aux) = record.aux(new_bc_tag) {
                     // Remove existing new CB tag if it was there already.
                     record.remove_aux(new_bc_tag)?;
-                }
 
-                // Add new barcode tag and new barcode name to the current BAM record.
-                record.push_aux(new_bc_tag, Aux::String(new_bc))?;
+                    // Add new barcode tag and new barcode name to the current BAM record.
+                    record.push_aux(new_bc_tag, Aux::String(&new_bc))?;
+                } else {
+                    // Add new barcode tag and new barcode name to the current BAM record.
+                    record.push_aux(new_bc_tag, Aux::String(&new_bc))?;
+                }
             }
+
         }
 
         // Write current BAM record to a new BAM file.
