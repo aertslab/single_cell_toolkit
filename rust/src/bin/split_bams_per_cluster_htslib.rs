@@ -62,12 +62,13 @@ struct Cli {
     output_prefix: PathBuf,
     #[arg(
         long = "chroms",
-        num_args(0..),
+        num_args(1..),
         required = false,
+        value_delimiter = ',',
         help = "List of chromosome names to keep reads for in the output BAM files.",
         long_help = "List of chromosome names to keep reads for in the output BAM files.\n\
         If not specified, keep reads for all chromosomes in the output BAM files.\n\
-        \u{20} e.g. --chroms chr1 chr5 chr8"
+        \u{20} e.g. --chroms 'chr1,chr3,chr8' or --chroms chr1 chr5 chr8"
     )]
     chromosomes: Option<Vec<String>>,
     #[arg(
