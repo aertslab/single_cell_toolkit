@@ -47,7 +47,8 @@ struct Cli {
         help = "Sample name to BAM filename mapping TSV file.",
         long_help = "Sample name to BAM filename mapping TSV file consisting of 2 columns:\n\
         \u{20} 1) sample: sample name (same name as used in cluster to cell barcode mapping TSV file)\n\
-        \u{20} 2) bam_filename: BAM filename"
+        \u{20} 2) bam_filename: BAM filename\n\
+        with \"sample\\tbam_filename\" as header."
     )]
     sample_to_bam_tsv_path: PathBuf,
     #[arg(
@@ -59,7 +60,8 @@ struct Cli {
         \u{20} 1) cluster: cluster\n\
         \u{20} 2) cell_barcode_input: input cell barcode (as written in input BAM files)\n\
         \u{20} 3) cell_barcode_output: output cell barcode (as to be written to output cluster BAM file)\n\
-        \u{20} 4) sample: sample name (same name as used in sample to bam mapping TSV file)"
+        \u{20} 4) sample: sample name (same name as used in sample to BAM filename mapping TSV file)\n\
+        with \"cluster\\tcell_barcode_input\\tcell_barcode_output\\tsample\" as header."
     )]
     cluster_to_cb_and_sample_tsv_path: PathBuf,
     #[arg(
@@ -67,9 +69,21 @@ struct Cli {
         long = "output_prefix",
         required = true,
         help = "Output prefix.",
-        long_help = "Output prefix used to create output cluster BAM files for each cluster."
+        long_help = "Output prefix used to create output cluster BAM files for each cluster.\n\
+        \u{20} e.g. \"./\", \"/full/path/\", \"./my_sample.\", \"/full/path/my_sample__\", ..."
     )]
     output_prefix: PathBuf,
+/*
+    #[arg(
+        long = "chroms",
+        num_args(0..),
+        required = false,
+        help = "List of chromosome names to keep reads for in the output BAM files.",
+        long_help = "List of chromosome names to keep reads for in the output BAM files.\n\
+        If not specified, keep reads for all chromosomes in the output BAM files.\n\
+        \u{20} e.g. --chroms chr1 chr5 chr8"
+    )]
+*/
     #[arg(
         short = 'f',
         long = "fragment_reads_only",
