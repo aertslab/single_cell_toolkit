@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (C) 2024-2022 - Gert Hulselmans
+# Copyright (C) 2022-2024 - Gert Hulselmans
 #
 # Purpose:
 #   Get first X number of reads from FASTQ file.
