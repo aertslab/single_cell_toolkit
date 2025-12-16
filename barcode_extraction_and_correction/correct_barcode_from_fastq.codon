@@ -2,15 +2,15 @@ import bio
 import sys
 
 from bio.kmer import Kmer
-from seq_lib.barcode_correction import (
+from barcode_extraction_and_correction.barcode_correction import (
     correct_bc_by_qual_order_with_whitelist_or_correct_bc_with_Ns_with_whitelist,
     map_barcodes_from_whitelist1_to_whitelist2,
     read_barcode_whitelist_from_file
 )
-from seq_lib.utils import get_seq_and_qual_barcode_read
+from barcode_extraction_and_correction.utils import get_seq_and_qual_barcode_read
 
 
-# bc_length needs to be passed when invoking seqc: "seqc run -D bc_length=16 -release correct_barcode_from_fastq.seq"
+# bc_length needs to be passed when invoking seqc: "codon run -plugin seq -release -D bc_length=16 correct_barcode_from_fastq.codon"
 K = Kmer[bc_length]
 
 # Minimum percentage of barcodes that should be found before returning with an error.
@@ -155,7 +155,7 @@ def correct_bc_from_fastq(
 def main():
     if len(sys.argv) < 8:
         print(
-            f"Usage: seqc run -D bc_length={bc_length} -release {sys.argv[0]} " +
+            f"Usage: codon run -plugin seq -release -D bc_length={bc_length} {sys.argv[0]} " +
             "bc_whitelist_file bc_remapping_file fastq_with_raw_bc_file corrected_bc_file " +
             "corrected_bc_stats_file bc_suffix max_mismatches [min_frac_bcs_to_find]",
             file=sys.stderr,

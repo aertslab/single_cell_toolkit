@@ -10,9 +10,8 @@ set -e
 set -o pipefail
 
 
-SEQC_RUN="seqc run -release";
-CODON_RUN="codon run -plugin seq -release";
-CODON_OR_SEQ_RUN="${CODON_OR_SEQ_RUN:-${CODON_RUN}}";
+CODON_RUN_DEFAULT_CMD="codon run -plugin seq -release";
+CODON_RUN_CMD="${CODON_RUN_CMD:-${CODON_RUN_DEFAULT_CMD}}";
 
 cellranger_atac_737k_cratac_v1_barcode_list_filename='/staging/leuven/res_00001/barcodes/cellranger_atac.737K-cratac-v1.txt.gz';
 hydrop_atac_v2_barcode_list_filename='/staging/leuven/res_00001/barcodes/HyDrop_v2.txt';
@@ -67,8 +66,8 @@ extract_and_correct_and_split_scalebio_atac_barcode_from_fastq () {
     fi
 
 
-    if ! type "${CODON_OR_SEQ_RUN%% *}" > /dev/null 2>&1 ; then
-        printf 'Error: "%s" not found or executable.\n' "${CODON_OR_SEQ_RUN%% *}";
+    if ! type "${CODON_RUN_CMD%% *}" > /dev/null 2>&1 ; then
+        printf 'Error: "%s" not found or executable.\n' "${CODON_RUN_CMD%% *}";
         return 1;
     fi
 

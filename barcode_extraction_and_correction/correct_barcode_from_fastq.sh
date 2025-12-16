@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (C) 2020-2024 - Gert Hulselmans
+# Copyright (C) 2020-2025 - Gert Hulselmans
 #
 # Purpose:
 #   Read index 2 FASTQ file with raw barcode reads and correct them
@@ -18,9 +18,8 @@ set -e
 set -o pipefail
 
 
-SEQC_RUN="seqc run -release";
-CODON_RUN="codon run -plugin seq -release";
-CODON_OR_SEQ_RUN="${CODON_OR_SEQ_RUN:-${CODON_RUN}}";
+CODON_RUN_DEFAULT_CMD="codon run -plugin seq -release";
+CODON_RUN_CMD="${CODON_RUN_CMD:-${CODON_RUN_DEFAULT_CMD}}";
 
 
 
@@ -95,8 +94,8 @@ correct_barcode_from_fastq () {
     fi
 
 
-    if ! type "${CODON_OR_SEQ_RUN%% *}" > /dev/null 2>&1 ; then
-        printf 'Error: "%s" not found or executable.\n' "${CODON_OR_SEQ_RUN%% *}";
+    if ! type "${CODON_RUN_CMD%% *}" > /dev/null 2>&1 ; then
+        printf 'Error: "%s" not found or executable.\n' "${CODON_RUN_CMD%% *}";
         return 1;
     fi
 
@@ -139,9 +138,9 @@ correct_barcode_from_fastq () {
     local script_dir="$(cd $(dirname "${BASH_SOURCE}") && pwd)";
 
     # Correct barcodes in index 2 FASTQ file:
-    ${CODON_OR_SEQ_RUN} \
+    ${CODON_RUN_CMD} \
         -D bc_length="${bc_length}" \
-        "${script_dir}/correct_barcode_from_fastq.seq" \
+        "${script_dir}/correct_barcode_from_fastq.codon" \
             "${bc_whitelist_filename}" \
             "${bc_remapping_filename}" \
             "${fastq_with_raw_bc_filename}" \

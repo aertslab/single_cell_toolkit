@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (C) 2020-2024 - Gert Hulselmans
+# Copyright (C) 2020-2025 - Gert Hulselmans
 #
 # Purpose:
 #   Read HyDrop RNA read 1 FASTQ file with raw barcode reads and correct them
@@ -18,9 +18,8 @@ set -e
 set -o pipefail
 
 
-SEQC_RUN="seqc run -release";
-CODON_RUN="codon run -plugin seq -release";
-CODON_OR_SEQ_RUN="${CODON_OR_SEQ_RUN:-${CODON_RUN}}";
+CODON_RUN_DEFAULT_CMD="codon run -plugin seq -release";
+CODON_RUN_CMD="${CODON_RUN_CMD:-${CODON_RUN_DEFAULT_CMD}}";
 
 
 
@@ -79,8 +78,8 @@ extract_and_correct_hydrop_rna_barcode_from_fastq () {
     fi
 
 
-    if ! type "${CODON_OR_SEQ_RUN%% *}" > /dev/null 2>&1 ; then
-        printf 'Error: "%s" not found or executable.\n' "${CODON_OR_SEQ_RUN%% *}";
+    if ! type "${CODON_RUN_CMD%% *}" > /dev/null 2>&1 ; then
+        printf 'Error: "%s" not found or executable.\n' "${CODON_RUN_CMD%% *}";
         return 1;
     fi
 
@@ -123,8 +122,8 @@ extract_and_correct_hydrop_rna_barcode_from_fastq () {
     local script_dir="$(cd $(dirname "${BASH_SOURCE}") && pwd)";
 
     # Extract and correct HyDrop RNA barcodes in read 1 FASTQ file:
-    ${CODON_OR_SEQ_RUN} \
-        "${script_dir}/extract_and_correct_hydrop_rna_barcode_from_fastq.seq" \
+    ${CODON_RUN_CMD} \
+        "${script_dir}/extract_and_correct_hydrop_rna_barcode_from_fastq.codon" \
             "${hydrop_rna_bc_whitelist_filename}" \
             "${fastq_with_raw_bc_filename}" \
             "/dev/stdout" \

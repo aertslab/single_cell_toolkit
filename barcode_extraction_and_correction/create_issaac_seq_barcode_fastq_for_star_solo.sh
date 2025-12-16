@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (C) 2020-2024 - Gert Hulselmans
+# Copyright (C) 2020-2025 - Gert Hulselmans
 #
 # Purpose:
 #   Create corrected ISSAAC-seq barcode FASTQ file for usage with STAR solo.
@@ -32,9 +32,8 @@ compress_fastq_igzip_cmd="igzip -${compress_fastq_igzip_level} -c";
 compress_fastq_gzip_cmd="gzip -${compress_fastq_level} -c";
 
 
-SEQC_RUN="seqc run -release";
-CODON_RUN="codon run -plugin seq -release";
-CODON_OR_SEQ_RUN="${CODON_OR_SEQ_RUN:-${CODON_RUN}}";
+CODON_RUN_DEFAULT_CMD="codon run -plugin seq -release";
+CODON_RUN_CMD="${CODON_RUN_CMD:-${CODON_RUN_DEFAULT_CMD}}";
 
 
 
@@ -143,8 +142,8 @@ create_issaac_seq_barcode_fastq_for_star_solo () {
         return 1;
     fi
 
-    if ! type "${CODON_OR_SEQ_RUN%% *}" > /dev/null 2>&1 ; then
-        printf 'Error: "%s" not found or executable.\n' "${CODON_OR_SEQ_RUN%% *}";
+    if ! type "${CODON_RUN_CMD%% *}" > /dev/null 2>&1 ; then
+        printf 'Error: "%s" not found or executable.\n' "${CODON_RUN_CMD%% *}";
         return 1;
     fi
 
@@ -244,8 +243,8 @@ create_issaac_seq_barcode_fastq_for_star_solo () {
         close(read_fastq_R2_cmd);
         close(read_fastq_I2_cmd);
     }' \
-    | ${CODON_OR_SEQ_RUN} \
-        "${script_dir}/extract_and_correct_issaac_seq_barcode_from_fastq.seq" \
+    | ${CODON_RUN_CMD} \
+        "${script_dir}/extract_and_correct_issaac_seq_barcode_from_fastq.codon" \
             "${hydrop_rna_bc_whitelist_filename}" \
             "/dev/stdin" \
             "/dev/stdout" \

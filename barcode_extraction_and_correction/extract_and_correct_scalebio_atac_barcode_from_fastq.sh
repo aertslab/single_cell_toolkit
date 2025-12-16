@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (C) 2020-2024 - Gert Hulselmans
+# Copyright (C) 2020-2025 - Gert Hulselmans
 #
 # Purpose:
 #   Read ScaleBio index 2 FASTQ file with raw barcode reads and correct them
@@ -18,9 +18,8 @@ set -e
 set -o pipefail
 
 
-SEQC_RUN="seqc run -release";
-CODON_RUN="codon run -plugin seq -release";
-CODON_OR_SEQ_RUN="${CODON_OR_SEQ_RUN:-${CODON_RUN}}";
+CODON_RUN_DEFAULT_CMD="codon run -plugin seq -release";
+CODON_RUN_CMD="${CODON_RUN_CMD:-${CODON_RUN_DEFAULT_CMD}}";
 
 
 
@@ -140,8 +139,8 @@ extract_and_correct_scalebio_atac_barcode_from_fastq () {
     fi
 
 
-    if ! type "${CODON_OR_SEQ_RUN%% *}" > /dev/null 2>&1 ; then
-        printf 'Error: "%s" not found or executable.\n' "${CODON_OR_SEQ_RUN%% *}";
+    if ! type "${CODON_RUN_CMD%% *}" > /dev/null 2>&1 ; then
+        printf 'Error: "%s" not found or executable.\n' "${CODON_RUN_CMD%% *}";
         return 1;
     fi
 
@@ -156,8 +155,8 @@ extract_and_correct_scalebio_atac_barcode_from_fastq () {
 
     # Correct tagmentation and 10x/HyDrop ATAC barcodes in index 2 FASTQ file
     # (or correct only tagmentation barcode if correct_tagmentation_only="true").
-    ${CODON_OR_SEQ_RUN} \
-        "${script_dir}/extract_and_correct_scalebio_atac_barcode_from_fastq.seq" \
+    ${CODON_RUN_CMD} \
+        "${script_dir}/extract_and_correct_scalebio_atac_barcode_from_fastq.codon" \
             "${tenx_or_hydrop_atac_bc_whitelist_filename}" \
             "${tenx_or_hydrop}" \
             "${fastq_with_raw_bc_filename}" \

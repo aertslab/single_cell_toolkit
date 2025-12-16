@@ -2,12 +2,12 @@ import bio
 import sys
 
 from bio.kmer import Kmer
-from seq_lib.barcode_correction import (
+from barcode_extraction_and_correction.barcode_correction import (
     CorrectedBc,
     correct_bc_by_qual_order_with_whitelist_or_correct_bc_with_Ns_with_whitelist,
     read_barcode_whitelist_from_file
 )
-from seq_lib.utils import get_seq_and_qual_barcode_read
+from barcode_extraction_and_correction.utils import get_seq_and_qual_barcode_read
 
 
 # Minimum percentage of barcodes that should be found before returning with an error.
@@ -704,7 +704,7 @@ def correct_tagmentation_and_hydrop_atac_bc_from_fastq(
 def main():
     if len(sys.argv) < 10 or len(sys.argv) > 11:
         print(
-            f"Usage: seqc run -release {sys.argv[0]} " +
+            f"Usage: codon run -plugin seq -release {sys.argv[0]} " +
             "tenx_or_hydrop_atac_bc_whitelist_filename tenx_or_hydrop fastq_with_raw_bc_file corrected_bc_file " +
             "corrected_bc_stats_file scalebio_bc_type correct_tagmentation_only bc_suffix max_mismatches [min_frac_bcs_to_find]",
             file=sys.stderr,

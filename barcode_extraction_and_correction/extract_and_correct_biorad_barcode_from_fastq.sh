@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (C) 2021-2024 - Gert Hulselmans
+# Copyright (C) 2021-2025 - Gert Hulselmans
 #
 # Purpose:
 #   Extract barcodes and ATAC part of read from BioRad v2.1 FASTQ files,
@@ -31,9 +31,8 @@ compress_fastq_igzip_cmd="igzip -${compress_fastq_igzip_level} -c";
 compress_fastq_gzip_cmd="gzip -${compress_fastq_level} -c";
 
 
-SEQC_RUN="seqc run -release";
-CODON_RUN="codon run -plugin seq -release";
-CODON_OR_SEQ_RUN="${CODON_OR_SEQ_RUN:-${CODON_RUN}}";
+CODON_RUN_DEFAULT_CMD="codon run -plugin seq -release";
+CODON_RUN_CMD="${CODON_RUN_CMD:-${CODON_RUN_DEFAULT_CMD}}";
 
 
 
@@ -145,8 +144,8 @@ extract_and_correct_biorad_barcode_from_fastq () {
     esac
 
 
-    if ! type "${CODON_OR_SEQ_RUN%% *}" > /dev/null 2>&1 ; then
-        printf 'Error: "%s" not found or executable.\n' "${CODON_OR_SEQ_RUN%% *}";
+    if ! type "${CODON_RUN_CMD%% *}" > /dev/null 2>&1 ; then
+        printf 'Error: "%s" not found or executable.\n' "${CODON_RUN_CMD%% *}";
         return 1;
     fi
 
@@ -170,8 +169,8 @@ extract_and_correct_biorad_barcode_from_fastq () {
     # and barcode info in FASTQ comment field.
     # Pipe the new R1 FASTQ into mawk, fix read name comments in R2 reads and
     # write both fixed FASTQ files.
-    "${CODON_OR_SEQ_RUN}" \
-        "${script_dir}/extract_and_correct_biorad_barcode_from_fastq.seq" \
+    "${CODON_RUN_CMD}" \
+        "${script_dir}/extract_and_correct_biorad_barcode_from_fastq.codon" \
             "${fastq_R1_filename}" \
             '/dev/stdout' \
             "${corrected_bc_stats_tsv_filename}" \
