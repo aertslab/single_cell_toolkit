@@ -780,14 +780,15 @@ def main():
                 warning=True,
             )
 
-            # Read per partial HyDrop ATAC whitelisted barcodes from file and convert to a set of Kmers.
+            # Read partial HyDrop ATAC whitelisted barcodes from file and convert to a set of Kmers.
             hydrop_atac_partial_bc_whitelists = []
-            for i in [1, 2, 3]:
+            for bc_start_idx in [0, 10, 20]:
                 hydrop_atac_partial_bc_whitelists.append(
                     read_barcode_whitelist_from_file(
                         bc_whitelist_filename=tenx_or_hydrop_atac_bc_whitelist_filename,
                         bc_length=10,
-                        bc_column_idx=i,
+                        bc_column_idx=0,
+                        bc_start_idx=bc_start_idx,
                         warning=True,
                     )
                 )

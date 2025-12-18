@@ -10,6 +10,7 @@ def read_barcode_whitelist_from_file(
     bc_whitelist_filename: str,
     bc_length: Static[int],
     bc_column_idx: int = 0,
+    bc_start_idx: Optional[int] = None,
     warning: bool=True
 ):
     """
@@ -24,6 +25,10 @@ def read_barcode_whitelist_from_file(
     bc_column_idx
         Column index in which the cell barcode can be found.
         Default: 0 (first column).
+    bc_start_idx
+        Start index to extract barcode from.
+        If specified, bc_length number of bases will be extracted starting from this index.
+        Default: None (use full barcode).
     warning
         Print warnings.
 
@@ -49,7 +54,12 @@ def read_barcode_whitelist_from_file(
             )
             continue
 
-        bc_str = columns[bc_column_idx]
+        bc_str = (
+            columns[bc_column_idx]
+            if bc_start_idx is None
+            else columns[bc_column_idx][bc_start_idx:bc_start_idx+bc_length]
+        )
+
         bc_length_current_line = len(bc_str)
 
         if bc_length_current_line == 0 or bc_str[0] == "#":
