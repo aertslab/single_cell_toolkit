@@ -390,7 +390,7 @@ class CorrectedBc:
     hamming_dist: int
     corrected_bc: str
 
-    def __new__(hamming_dist: int, corrected_bc: str) -> CorrectedBc:
+    def __new__(hamming_dist: int, corrected_bc: seq) -> CorrectedBc:
         return (hamming_dist, corrected_bc)
 
 
