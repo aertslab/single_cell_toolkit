@@ -197,7 +197,7 @@ def correct_reverse_transcription_and_10x_atac_bc_from_fastq(
                 fastq_record=record,
                 seq_start=0,
                 seq_end=13,
-                auto_reverse_comp=False,  # Never reverse complement.
+                auto_rev_comp=False,  # Never reverse complement.
             )
 
             # Extract 10x ATAC barcode sequence and quality.
@@ -208,8 +208,8 @@ def correct_reverse_transcription_and_10x_atac_bc_from_fastq(
                 fastq_record=record,
                 seq_start=13,
                 seq_end=29,
-                auto_reverse_comp=True,  # Reverse complement if needed based on the
-                                         # sequencer (comes from index read 2).
+                auto_rev_comp=True,  # Reverse complement if needed based on the
+                                     # sequencer (comes from index read 2).
             )
 
             # Extract UMI sequence and quality.
@@ -220,7 +220,7 @@ def correct_reverse_transcription_and_10x_atac_bc_from_fastq(
                 fastq_record=record,
                 seq_start=29,
                 seq_end=37,
-                auto_reverse_comp=False,  # Never reverse complement.
+                auto_rev_comp=False,  # Never reverse complement.
             )
 
             corrected_reverse_transcription_bc = correct_bc_by_qual_order_with_whitelist_or_correct_bc_with_Ns_with_whitelist(

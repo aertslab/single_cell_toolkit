@@ -85,7 +85,7 @@ def extract_and_correct_hydrop_rna_barcode_from_fastq(
                 fastq_record=record,
                 seq_start=0,
                 seq_end=40,
-                auto_reverse_comp=False,
+                auto_rev_comp=False,
             )
 
             # Extract HyDrop RNA barcode sequence and quality without 5bp spacers.

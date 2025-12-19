@@ -80,8 +80,8 @@ def correct_issaac_seq_barcode_from_fastq(
                 fastq_record=record,
                 seq_start=0,
                 seq_end=30,
-                auto_reverse_comp=True,  # Reverse complement if needed based on the
-                                         # sequencer (comes from index read 2).
+                auto_rev_comp=True,  # Reverse complement if needed based on the
+                                     # sequencer (comes from index read 2).
             )
 
             # Extract UMI sequence and quality.
@@ -92,7 +92,7 @@ def correct_issaac_seq_barcode_from_fastq(
                 fastq_record=record,
                 seq_start=30,
                 seq_end=40,
-                auto_reverse_comp=False,  # Never reverse complement.
+                auto_rev_comp=False,  # Never reverse complement.
             )
 
             corrected_hydrop_rna_bc = correct_bc_by_qual_order_with_whitelist_or_correct_bc_with_Ns_with_whitelist(
