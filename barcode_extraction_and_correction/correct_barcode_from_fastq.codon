@@ -26,6 +26,7 @@ def correct_bc_from_fastq(
     bc_suffix: str = "1",
     max_hamming_dist: int = 1,
     min_frac_bcs_to_find: float = min_frac_bcs_to_find_default,
+    auto_rev_comp: bool = True,
 ):
     """
     Read index 2 FASTQ file with barcodes and get read name, raw barcode sequences and
@@ -55,6 +56,13 @@ def correct_bc_from_fastq(
     min_frac_bcs_to_find:
         Required minimum fraction of barcode reads that need to contain a barcode.
         Default: 0.5.
+    auto_rev_comp:
+        Automatically reverse complement the sequence and associated quality,
+        based on the sequencer. This assumes the input FASTQ file with raw barcode
+        reads is index read 2 (which is is the case for many sc/snATAC protocols).
+        If your raw barcode reads are in read 1 (e.g. 10x sc/snRNA) or read2, set
+        this setting to False.
+        Default: True
 
     Returns
     -------
@@ -81,11 +89,12 @@ def correct_bc_from_fastq(
             total_reads += 1
 
             # Get barcode sequence and associated quality from FASTQ record
-            # reverse complemented if needed based on the sequencer.
+            # reverse complemented if needed based on the sequencer (assumes index 2 read).
             bc_seq, bc_qual, _is_bc_rev = get_seq_and_qual_barcode_read(
                 fastq_record=record,
                 seq_start=0,
                 seq_end=bc_length,
+                auto_rev_comp=auto_rev_comp,
             )
 
             corrected_bc = correct_bc_by_qual_order_with_whitelist_or_correct_bc_with_Ns_with_whitelist(
@@ -157,7 +166,8 @@ def main():
         print(
             f"Usage: codon run -plugin seq -release -D bc_length={bc_length} {sys.argv[0]} " +
             "bc_whitelist_file bc_remapping_file fastq_with_raw_bc_file corrected_bc_file " +
-            "corrected_bc_stats_file bc_suffix max_mismatches [min_frac_bcs_to_find]",
+            "corrected_bc_stats_file bc_suffix max_mismatches [min_frac_bcs_to_find] " +
+            "[auto_rev_comp]",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -169,7 +179,8 @@ def main():
         corrected_bc_stats_tsv_filename = sys.argv[5]
         bc_suffix = sys.argv[6]
         max_mismatches = int(sys.argv[7])
-        min_frac_bcs_to_find = float(sys.argv[8]) if len(sys.argv) == 9 else min_frac_bcs_to_find_default
+        min_frac_bcs_to_find = float(sys.argv[8]) if len(sys.argv) >= 9 else min_frac_bcs_to_find_default
+        auto_rev_comp = (sys.argv[9] == "true") if len(sys.argv) == 10 else True
 
         # Read whitelisted barcodes from file and convert to a set of Kmers.
         bc_whitelist = read_barcode_whitelist_from_file(
@@ -199,6 +210,7 @@ def main():
             bc_suffix=bc_suffix,
             max_hamming_dist=max_mismatches,
             min_frac_bcs_to_find=min_frac_bcs_to_find,
+            auto_rev_comp=auto_rev_comp,
         )
 
         if not enough_bcs_found:

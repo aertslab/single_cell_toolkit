@@ -31,12 +31,14 @@ correct_barcode_from_fastq () {
     local bc_suffix="${5:-1}";
     local max_mismatches="${6:-1}";
     local min_frac_bcs_to_find="${7:-0.5}";
+    local auto_rev_comp="${8:-true}";
 
     if [ ${#@} -lt 4 ] ; then
         printf 'Usage:\n';
         printf '    correct_barcode_from_fastq \\\n';
         printf '        bc_whitelist_file bc_remapping_file fastq_with_raw_bc_file \\\n';
-        printf '        corrected_bc_file [bc_suffix] [max_mismatches] [min_frac_bcs_to_find]\n\n';
+        printf '        corrected_bc_file [bc_suffix] [max_mismatches] [min_frac_bcs_to_find]\n';
+        printf '        [auto_rev_comp]\n\n';
         printf 'Purpose:\n';
         printf '    Read index 2 FASTQ file with raw barcode reads and correct them\n';
         printf '    according to the provided whitelist.\n\n';
@@ -69,6 +71,13 @@ correct_barcode_from_fastq () {
         printf '        Minimum fraction of reads that need to have a barcode that matches the\n';
         printf '        whitelist.\n';
         printf '        Default: 0.5\n';
+        printf '    auto_rev_comp\n';
+        printf '        Automatically reverse complement the sequence and associated quality,\n';
+        printf '        based on the sequencer. This assumes the input FASTQ file with raw barcode\n';
+        printf '        reads is index read 2 (which is is the case for many sc/snATAC protocols).\n';
+        printf '        If your raw barcode reads are in read 1 (e.g. 10x sc/snRNA) or read2, set\n';
+        printf '        this setting to "false".\n'
+        printf '        Default: "true"\n;'
         return 1;
     fi
 
@@ -85,6 +94,16 @@ correct_barcode_from_fastq () {
                 printf 'Error: Barcode remapping file "%s" could not be found.\n' "${bc_remapping_filename}" >&2;
                 return 1;
             fi;;
+    esac
+
+    case "${auto_rev_comp,,}" in
+        "false")
+            ;;
+        "true")
+            ;;
+        *)
+            printf 'Error: Auto reverse complement argument should be "true" or "false", found "%s".\n' "${auto_rev_comp}" >&2;
+            return 1;;
     esac
 
 
@@ -149,6 +168,7 @@ correct_barcode_from_fastq () {
             "${bc_suffix}" \
             "${max_mismatches}" \
             "${min_frac_bcs_to_find}" \
+            "${auto_rev_comp}" \
       | zstd -6 -T4 -q -f -o "${corrected_bc_filename%.zst}.zst";
 }
 
