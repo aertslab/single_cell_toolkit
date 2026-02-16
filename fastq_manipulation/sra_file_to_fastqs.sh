@@ -59,6 +59,28 @@ sra_file_to_fastqs () {
          return 1;
     fi
 
+    # Get SRR number from SRA filename:
+    #   - Remove ".sra" extension.
+    #   - Remove parent dirs.
+    local srr_number="${sra_file%.sra}";
+    srr_number="${srr_number##*/}";
+
+    echo "Get sample name for \"${srr_number}\"..."
+
+    # Get sample name for SRR number.
+    local sample_name=$(srr_number_to_sample_name "${srr_number}");
+
+    if [ $? -ne 0 ] ; then
+        # Exit if EDirect tools are not found.
+        return 1;
+    fi
+
+    echo "Sample name for \"${srr_number}\": \"${sample_name}\".";
+
+    local fastq='';
+    local fastq_with_sample_name='';
+    local -i read_number=1;
+
     echo "Convert SRA file \"${sra_file}\" to multiple FASTQ files...";
 
     # Convert SRA file to multiple FASTQ files:
@@ -79,23 +101,6 @@ sra_file_to_fastqs () {
         --outdir "${output_dir}" \
         -t "${FASTERQ_TMP_DIR}" \
         "${sra_file}";
-
-    # Get SRR number from SRA filename:
-    #   - Remove ".sra" extension.
-    #   - Remove parent dirs.
-    local srr_number="${sra_file%.sra}";
-    srr_number="${srr_number##*/}";
-
-    echo "Get sample name for \"${srr_number}\"..."
-
-    # Get sample name for SRR number.
-    local sample_name=$(srr_number_to_sample_name "${srr_number}");
-
-    echo "Sample name for \"${srr_number}\": \"${sample_name}\".";
-
-    local fastq='';
-    local fastq_with_sample_name='';
-    local -i read_number=1;
 
     for fastq in "${output_dir%/}/${srr_number}_"[0-4]'.fastq' ; do
         fastq_with_sample_name="${output_dir%/}/${sample_name}___${srr_number}___S1_R${read_number}_001.fastq";
