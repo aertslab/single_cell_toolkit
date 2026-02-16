@@ -54,8 +54,18 @@ sra_file_to_fastqs () {
          return 1;
     fi
 
+    if ! type mawk > /dev/null 2>&1 ; then
+         printf 'Error: "mawk" is not installed.\n' >&2;
+         return 1;
+    fi
+
     if ! type fasterq-dump > /dev/null 2>&1 ; then
          printf 'Error: "fasterq-dump" (from SRA-Toolkit) is not installed.\n' >&2;
+         return 1;
+    fi
+
+    if ! type vdb-dump > /dev/null 2>&1 ; then
+         printf 'Error: "vdb-dump" (from SRA-Toolkit) is not installed.\n' >&2;
          return 1;
     fi
 
@@ -80,6 +90,27 @@ sra_file_to_fastqs () {
     local fastq='';
     local fastq_with_sample_name='';
     local -i read_number=1;
+
+    if vdb-dump -R 1 -C LINKAGE_GROUP "${sra_file}" 2>&1 \
+            | grep -q 'column not found while updating cursor within virtual database module' ; then
+        true;
+    else
+        # Get script dir.
+        local script_dir="$(cd $(dirname "${BASH_SOURCE}") && pwd)";
+
+        # Old 10X sc/snRNA dataset in GEO sometimes have no read with the CB and UMI, but
+        # store the CB and UMI in the "LINKAGE_GROUP" field of each read in the SRA file.
+        printf 'Running "%s/extract_cb_umi_as_fastq_from_sra_file.sh %s %s" to extract the CB/UMI read as R1 read from "LINKAGE_GROUP" field.\n' \
+            "${script_dir}" \
+            "${sra_file}" \
+            "${output_dir}";
+
+        "${script_dir}/extract_cb_umi_as_fastq_from_sra_file.sh" "${sra_file}" "${output_dir}";
+
+        # As the CB and UMI read is the R1 read, set the starting read number
+        # for renaming FASTQ files produced by fasterq-dump to 2.
+        read_number+=1;
+    fi
 
     echo "Convert SRA file \"${sra_file}\" to multiple FASTQ files...";
 
