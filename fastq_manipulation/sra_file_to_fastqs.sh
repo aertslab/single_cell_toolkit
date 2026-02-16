@@ -49,6 +49,16 @@ sra_file_to_fastqs () {
         return 1;
     fi
 
+    if ! type bgzip > /dev/null 2>&1 ; then
+         printf 'Error: "bgzip" (from HTSlib) is not installed.\n' >&2;
+         return 1;
+    fi
+
+    if ! type fasterq-dump > /dev/null 2>&1 ; then
+         printf 'Error: "fasterq-dump" (from SRA-Toolkit) is not installed.\n' >&2;
+         return 1;
+    fi
+
     echo "Convert SRA file \"${sra_file}\" to multiple FASTQ files...";
 
     # Convert SRA file to multiple FASTQ files:
@@ -95,6 +105,8 @@ sra_file_to_fastqs () {
 
         read_number+=1;
     done
+
+    printf '\n';
 }
 
 
@@ -110,6 +122,21 @@ srr_number_to_sample_name () {
         printf 'Parameters:\n';
         printf '    srr_number: SRR number for which to retrieve the sample name.\n\n'
         return 1;
+    fi
+
+    if ! type efetch > /dev/null 2>&1 ; then
+         printf 'Error: "efetch" (from EDirect) is not installed.\n' >&2;
+         return 1;
+    fi
+
+    if ! type esearch > /dev/null 2>&1 ; then
+         printf 'Error: "esearch" (from EDirect) is not installed.\n' >&2;
+         return 1;
+    fi
+
+    if ! type xtract > /dev/null 2>&1 ; then
+         printf 'Error: "xtract" (from EDirect) is not installed.\n' >&2;
+         return 1;
     fi
 
     local sample_name=$(
