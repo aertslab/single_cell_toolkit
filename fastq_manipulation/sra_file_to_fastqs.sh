@@ -134,7 +134,7 @@ sra_file_to_fastqs () {
         "${sra_file}";
 
     for fastq in "${output_dir%/}/${srr_number}_"[0-4]'.fastq' ; do
-        fastq_with_sample_name="${output_dir%/}/${sample_name}___${srr_number}___S1_R${read_number}_001.fastq";
+        fastq_with_sample_name="${output_dir%/}/${sample_name}___${srr_number}___S1_L001_R${read_number}_001.fastq";
         mv "${fastq}" "${fastq_with_sample_name}"
         echo "Compressing \"${fastq_with_sample_name}\"...";
         bgzip -@ 4 "${fastq_with_sample_name}";

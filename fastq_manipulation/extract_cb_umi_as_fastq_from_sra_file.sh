@@ -87,7 +87,7 @@ extract_cb_umi_as_fastq_from_sra_file () {
     echo "Sample name for \"${srr_number}\": \"${sample_name}\".";
 
     # Create output FASTQ name.
-    fastq_with_sample_name="${output_dir%/}/${sample_name}___${srr_number}___S1_R1_001.fastq.gz";
+    fastq_with_sample_name="${output_dir%/}/${sample_name}___${srr_number}___S1_L001_R1_001.fastq.gz";
 
     # Extract sequence name and CB and UMI and convert to bgzipped FASTQ format
     # (with fake quality scores).
