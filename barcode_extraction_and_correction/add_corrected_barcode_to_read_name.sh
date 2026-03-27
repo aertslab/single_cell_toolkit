@@ -1,10 +1,10 @@
 #!/bin/bash
 #
-# Copyright (C) 2020-2024 - Gert Hulselmans
+# Copyright (C) 2020-2026 - Gert Hulselmans
 #
 # Purpose:
-#   Barcode 10x scATAC FASTQ files by adding the cell barcode from R2 to each
-#   read in R1 and R3, as a comment or in front of the original read name.
+#   Barcode scATAC R1 and R2 FASTQ files by adding raw barcode sequence, raw barcode quality
+#   and corrected barcode sequence in SAM tag format to each read name in R1 and R2 as comment.
 
 
 set -e
@@ -187,7 +187,6 @@ add_corrected_barcode_to_read_name () {
         corrected_bc_line = "";
 
         fastq_line_number = 0;
-        corrected_bc_line_number = 0;
 
         # Read FASTQ R1 file (which contains read 1).
         while ( (read_fastq_R1_cmd | getline fastq_R1_line) > 0 ) {
@@ -231,23 +230,21 @@ add_corrected_barcode_to_read_name () {
                     # can have more reads as none were removed as can happen during quality trimming).
                     while ( read_name_corrected_bc != read_name_R1 ) {
                         if ( (read_corrected_bc_file_cmd | getline corrected_bc_line) > 0 ) {
-                            corrected_bc_line_number += 1;
-
                             # Split corrected barcode line on spaces:
                             #   - read name: strip "@" from the start.
                             #   - corrected barcode info as SAM tags separated by "\t":
                             #       CR:Z:raw_bc\tCY:Z:raw_bc_qual\tCB:Z:corrected_bc_seq
 
-                            # Find first space position (0 if no comment found) in read name from all input FASTQ files.
+                            # Find first space position (0 if no comment found) in read name line.
                             read_name_corrected_bc_space_pos = index(corrected_bc_line, " ");
 
-                            # Extract read name from all input FASTQ files.
+                            # Extract read name and (corrected) barcode SAM tags.
                             if (read_name_corrected_bc_space_pos > 0) {
                                 read_name_corrected_bc = substr(corrected_bc_line, 2, read_name_corrected_bc_space_pos - 2);
-                                corrected_bc_sam_tags = substr(corrected_bc_line, read_name_corrected_bc_space_pos + 1);
+                                bc_sam_tags = substr(corrected_bc_line, read_name_corrected_bc_space_pos + 1);
                             } else {
                                 read_name_corrected_bc = substr(corrected_bc_line, 2);
-                                corrected_bc_sam_tags = "";
+                                bc_sam_tags = "";
                             }
 
                             # Remove CB and UMI from end of read name, if it is there.
@@ -264,9 +261,14 @@ add_corrected_barcode_to_read_name () {
                     # Quality lines.
 
                     # Write the full FASTQ record to the R1 and R2 output FASTQ file with barcode info in the read name comments.
-                    # When write_fastq_R1_cmd and write_fastq_R2_cmd are the same, an interleaved FASTQ fille will be written.
-                    print "@" read_name_R1 " " corrected_bc_sam_tags "\n" sequence_R1 "\n+\n" fastq_R1_line | write_fastq_R1_cmd;
-                    print "@" read_name_R2 " " corrected_bc_sam_tags "\n" sequence_R2 "\n+\n" fastq_R2_line | write_fastq_R2_cmd;
+                    # When write_fastq_R1_cmd and write_fastq_R2_cmd are the same, an interleaved FASTQ file will be written.
+                    if ( bc_sam_tags != "" ) {
+                        print "@" read_name_R1 " " bc_sam_tags "\n" sequence_R1 "\n+\n" fastq_R1_line | write_fastq_R1_cmd;
+                        print "@" read_name_R2 " " bc_sam_tags "\n" sequence_R2 "\n+\n" fastq_R2_line | write_fastq_R2_cmd;
+                    } else {
+                        print "@" read_name_R1 "\n" sequence_R1 "\n+\n" fastq_R1_line | write_fastq_R1_cmd;
+                        print "@" read_name_R2 "\n" sequence_R2 "\n+\n" fastq_R2_line | write_fastq_R2_cmd;
+                    }
                 }
             }
         }
