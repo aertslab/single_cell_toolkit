@@ -10,7 +10,7 @@ from barcode_extraction_and_correction.barcode_correction import (
 from barcode_extraction_and_correction.utils import get_seq_and_qual_barcode_read
 
 
-# bc_length needs to be passed when invoking seqc: "codon run -plugin seq -release -D bc_length=16 correct_barcode_from_fastq.codon"
+# bc_length needs to be passed when invoking codon: "codon run -plugin seq -release -D bc_length=16 correct_barcode_from_fastq.codon"
 K = Kmer[bc_length]
 
 # Minimum percentage of barcodes that should be found before returning with an error.
