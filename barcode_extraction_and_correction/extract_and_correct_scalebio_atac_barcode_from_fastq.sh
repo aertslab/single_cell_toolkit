@@ -109,7 +109,7 @@ extract_and_correct_scalebio_atac_barcode_from_fastq () {
         set +o pipefail
 
         # Gzip compressed file.
-        first_barcode=$(zcat "${tenx_or_hydrop_atac_bc_whitelist_filename}" | head -n 1);
+        first_barcode=$(gzip -c -d "${tenx_or_hydrop_atac_bc_whitelist_filename}" | head -n 1);
 
         # Set pipefail.
         set -o pipefail

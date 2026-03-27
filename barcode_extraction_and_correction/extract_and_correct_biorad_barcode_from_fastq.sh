@@ -13,7 +13,7 @@ set -o pipefail
 
 
 decompress_fastq_cat_cmd='cat';
-decompress_fastq_zcat_cmd='zcat';
+decompress_fastq_gzip_cmd='gzip -c -d';
 decompress_fastq_igzip_cmd='igzip -c -d';
 
 
@@ -110,7 +110,7 @@ extract_and_correct_biorad_barcode_from_fastq () {
         local decompress_fastq_gzipped_cmd="${decompress_fastq_igzip_cmd}";
     else
         # Decompress gzipped FASTQ files with gzip.
-        local decompress_fastq_gzipped_cmd="${decompress_fastq_zcat_cmd}";
+        local decompress_fastq_gzipped_cmd="${decompress_fastq_gzip_cmd}";
     fi
 
 

@@ -135,7 +135,7 @@ correct_barcode_from_fastq () {
         set +o pipefail
 
         # Gzip compressed file.
-        first_barcode=$(zcat "${bc_whitelist_filename}" | head -n 1);
+        first_barcode=$(gzip -c -d "${bc_whitelist_filename}" | head -n 1);
 
         # Set pipefail.
         set -o pipefail

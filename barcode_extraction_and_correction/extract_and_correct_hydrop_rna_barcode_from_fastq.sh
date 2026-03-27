@@ -100,7 +100,7 @@ extract_and_correct_hydrop_rna_barcode_from_fastq () {
         set +o pipefail
 
         # Gzip compressed file.
-        first_barcode=$(zcat "${hydrop_rna_bc_whitelist_filename}" | head -n 1);
+        first_barcode=$(gzip -c -d "${hydrop_rna_bc_whitelist_filename}" | head -n 1);
 
         # Set pipefail.
         set -o pipefail

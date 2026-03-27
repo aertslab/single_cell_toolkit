@@ -100,7 +100,7 @@ extract_and_correct_hydrop_atac_barcode_from_fastq () {
         set +o pipefail
 
         # Gzip compressed file.
-        first_barcode=$(zcat "${hydrop_atac_bc_whitelist_filename}" | head -n 1);
+        first_barcode=$(gzip -c -d "${hydrop_atac_bc_whitelist_filename}" | head -n 1);
 
         # Set pipefail.
         set -o pipefail
