@@ -175,10 +175,16 @@ srr_number_to_sample_name () {
          return 1;
     fi
 
+    # Extract sample title or experiment title as fallback.
     local sample_name=$(
         esearch -db sra -query "${srr_number}" \
           | efetch -format xml \
-          | xtract -pattern SAMPLE -element TITLE
+          | xtract \
+                -pattern EXPERIMENT_PACKAGE \
+                -if SAMPLE/TITLE \
+                  -element SAMPLE/TITLE \
+                -else \
+                  -element EXPERIMENT/TITLE
     );
 
     # Replace some "dangerous" characters with "_".
