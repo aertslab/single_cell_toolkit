@@ -96,6 +96,9 @@ extract_cb_umi_as_fastq_from_sra_file () {
         -C 'NAME,LINKAGE_GROUP' \
         "${sra_file}" \
       | mawk -F '\t|:|-' '
+            BEGIN {
+                fake_quality = "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE";
+            }
             {
                 read_name = $1;
                 # Cell barcode without "-1".
@@ -105,10 +108,11 @@ extract_cb_umi_as_fastq_from_sra_file () {
                 if (cb == "") {
                     # No cell barcode defined for current read, set a fake one.
                     cb = "GGGGGGGGGGGGGGGG";
-                    umi = "GGGGGGGGGG";
+                    umi = "GGGGGGGGGGGG";
                 }
 
-                print "@" read_name "\n" cb umi "\n+\nEEEEEEEEEEEEEEEEEEEEEEEEEE" }' \
+                print "@" read_name "\n" cb umi "\n+\n" substr(fake_quality, 1, length(cb) + length(umi));
+            }' \
       | bgzip -@ 4 \
       > "${fastq_with_sample_name}";
 }
