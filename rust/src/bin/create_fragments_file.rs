@@ -62,7 +62,7 @@ struct Fragment {
 
 // Write fragment with fragment counts fast to a BGZF compressed file.
 fn write_fragment(
-    fragments_file_writer: &mut bgzf::MultithreadedWriter<File>,
+    fragments_file_writer: &mut bgzf::io::MultithreadedWriter<File>,
     fragment: &Fragment,
     fragment_count: usize,
 ) {
@@ -105,7 +105,7 @@ fn create_fragments_file(
     let bam_file = File::open(bam_path)?;
 
     let bam_bgzf_reader =
-        bgzf::MultithreadedReader::with_worker_count(bam_decompressing_worker_threads, bam_file);
+        bgzf::io::MultithreadedReader::with_worker_count(bam_decompressing_worker_threads, bam_file);
 
     // After decompressing BGZF blocks of BAM file in parallel,
     // decode the actual BAM records.
@@ -117,10 +117,10 @@ fn create_fragments_file(
     // of bgzip of HTSlib (which has libdeflate level 7 mapped to level 6:
     // https://github.com/samtools/htslib/pull/1488).
     let fragments_file = File::create(fragments_path)?;
-    let compression_level = bgzf::writer::CompressionLevel::try_from(7)?;
+    let compression_level = bgzf::io::writer::CompressionLevel::try_from(7)?;
     let fragments_compressing_worker_threads = NonZeroUsize::new(3).unwrap();
 
-    let mut fragments_file_writer = bgzf::multithreaded_writer::Builder::default()
+    let mut fragments_file_writer = bgzf::io::multithreaded_writer::Builder::default()
         .set_compression_level(compression_level)
         .set_worker_count(fragments_compressing_worker_threads)
         .build_from_writer(fragments_file);
