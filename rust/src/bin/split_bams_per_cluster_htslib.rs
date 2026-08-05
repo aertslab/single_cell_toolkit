@@ -151,7 +151,7 @@ type BamFileToBamIndexedReaderMapping = HashMap<String, IndexedReader>;
 type ClusterToBamWriterMapping = HashMap<String, Writer>;
 
 trait ContainsSlice<T>: PartialEq<[T]> {
-    fn contains_slice(self: &'_ Self, slice: &'_ [T]) -> bool;
+    fn contains_slice(&'_ self, slice: &'_ [T]) -> bool;
 }
 
 impl<T, Item: PartialEq<T>> ContainsSlice<T> for [Item] {
@@ -488,10 +488,8 @@ fn split_bams_per_cluster(
         let chrom_name = std::str::from_utf8(merged_header_view.tid2name(tid))
             .expect("Chromosome name is not valid UTF-8.")
             .to_string();
-        if chromosomes.is_some() {
-            if !chromosomes.as_ref().unwrap().contains(&chrom_name) {
-                continue;
-            }
+        if chromosomes.is_some() && !chromosomes.as_ref().unwrap().contains(&chrom_name) {
+            continue;
         }
 
         let chrom_end = merged_header_view.target_len(tid).unwrap();
