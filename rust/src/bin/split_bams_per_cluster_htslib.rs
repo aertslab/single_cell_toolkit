@@ -94,6 +94,14 @@ struct Cli {
     )]
     ignore_mate_mapping_quality: bool,
     #[arg(
+        short = 't',
+        long = "cb_tag",
+        required = false,
+        help = "SAM tag to use to look for the cell barcodes in the BAM files. Default: `CB`.",
+        long_help = "SAM tag to use to look for the cell barcodes in the BAM files. Default: `CB`.",
+    )]
+    cb_tag: Option<String>,
+    #[arg(
         short = 'C',
         long = "chunk_size",
         required = false,
@@ -330,9 +338,17 @@ fn split_bams_per_cluster(
     chromosomes: &Option<Vec<String>>,
     fragment_reads_only: bool,
     ignore_mate_mapping_quality: bool,
+    cb_tag: &Option<String>,
     chunk_size: u64,
     cmd_line_str: &str,
 ) -> Result<(), Box<dyn Error>> {
+    let cb_tag = match cb_tag {
+        None => b"CB",
+        Some(cb_tag_value) => cb_tag_value.as_bytes()
+            .try_into()
+            .expect("SAM tag for barcode should be exactly 2 characters long."),
+    };
+
     let bam_thread_pool = ThreadPool::new(16)?;
     let mut bam_file_to_bam_indexed_reader_mapping = BamFileToBamIndexedReaderMapping::new();
     let mut cluster_to_bam_writer_mapping = ClusterToBamWriterMapping::new();
@@ -465,8 +481,6 @@ fn split_bams_per_cluster(
         .filter(|(k, _v)| bam_file_to_bam_indexed_reader_mapping.get(*k).is_some())
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
-
-    let cb_tag = b"CB";
 
     // Loop over each chromosome and fetch reads in chunks from each BAM file and sort
     // them by position before writing them to the per cluster BAM file.
@@ -668,6 +682,7 @@ fn main() {
         &cli.chromosomes,
         cli.fragment_reads_only,
         cli.ignore_mate_mapping_quality,
+        &cli.cb_tag,
         cli.chunk_size,
         &cmd_line_str,
     ) {
