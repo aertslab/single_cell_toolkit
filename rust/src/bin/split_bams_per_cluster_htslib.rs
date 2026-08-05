@@ -22,7 +22,6 @@ use serde::Deserialize;
 #[derive(Parser, Debug)]
 #[command(author, version, long_about = None)]
 #[command(name = "split_bams_per_cluster_htslib")]
-#[command(about = "Split BAM files in per cluster BAM files based on cell barcodes.")]
 #[command(
     about = "Split (multiple) BAM file(s) in per cluster BAM files based on a list of cell barcodes per cluster."
 )]
@@ -98,7 +97,7 @@ struct Cli {
         long = "cb_tag",
         required = false,
         help = "SAM tag to use to look for the cell barcodes in the BAM files. Default: `CB`.",
-        long_help = "SAM tag to use to look for the cell barcodes in the BAM files. Default: `CB`.",
+        long_help = "SAM tag to use to look for the cell barcodes in the BAM files. Default: `CB`."
     )]
     cb_tag: Option<String>,
     #[arg(
@@ -344,9 +343,12 @@ fn split_bams_per_cluster(
 ) -> Result<(), Box<dyn Error>> {
     let cb_tag = match cb_tag {
         None => b"CB",
-        Some(cb_tag_value) => cb_tag_value.as_bytes()
-            .try_into()
-            .expect("SAM tag for barcode should be exactly 2 characters long."),
+        Some(cb_tag_value) => {
+            cb_tag_value
+                .as_bytes()
+                .try_into()
+                .expect("SAM tag for barcode should be exactly 2 characters long.")
+        }
     };
 
     let bam_thread_pool = ThreadPool::new(16)?;
