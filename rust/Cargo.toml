@@ -9,29 +9,29 @@ edition = "2021"
 [dependencies]
 ahash = "0.8.12"
 bio-types = "1.0.4"
-bstr = "1.12.1"
+bstr = "1.13.0"
 clap = { version = "4.6", features = ["derive"] }
 crossbeam = "0.8.4"
 csv = "1.4.0"
-dashmap = { version = "6.1.0", features = ["rayon"] }
-futures = "0.3.32"
+dashmap = { version = "6.2.1", features = ["rayon"] }
+futures = "0.3.33"
 grep-cli = "0.1.12"
-hashbrown = { version = "0.16.1", features = ["rayon"] }
-itertools = "0.14"
+hashbrown = { version = "0.17.1", features = ["rayon"] }
+itertools = "0.15"
 itoa = "1.0"
 #libz-sys = { version = "1.1.23", default = false, features = ["zlib-ng", "static"] }
 flate2 = { version = "1.1.9", features = ["zlib-rs"], default-features = false }
-needletail = { version = "0.7.1", default-features = false, features = ["bzip2", "flate2", "zstd"] }
+needletail = { version = "0.7.3", default-features = false, features = ["bzip2", "flate2", "zstd"] }
 noodles = { version = "0.109.0", features = ["async", "bam", "bgzf", "cram", "fasta", "sam"] }
 noodles-bgzf = { version = "0.46.0", features = ["libdeflate"] }
 noodles-util = {  version = "0.78.0" , features = ["alignment"] }
-num-iter = "0.1.45"
-rayon = "1.11"
-rust-htslib = { version = "1.0", default-features = false, features = ["libdeflate"] }
+num-iter = "0.1.46"
+rayon = "1.12"
+rust-htslib = { version = "1.0.1", default-features = false, features = ["libdeflate"] }
 serde = { version = "1", features = ["derive"] }
-tar = "0.4.45"
+tar = "0.4.46"
 termcolor = "1.4.1"
-tokio = { version = "1.50.0", features = ["io-std", "io-util", "macros", "rt-multi-thread"] }
+tokio = { version = "1.53.1", features = ["io-std", "io-util", "macros", "rt-multi-thread"] }
 libdeflater = "1.24"
 libdeflate-sys = "<1.25"
 
