@@ -35,7 +35,7 @@ struct Cli {
         long_help = "Sample name to BAM filename mapping TSV file consisting of 2 columns:\n\
         \u{20} 1) sample: sample name (same name as used in cluster to cell barcode mapping TSV file)\n\
         \u{20} 2) bam_filename: BAM filename\n\
-        with \"sample\\tbam_filename\" as header."
+        with \"sample\\tbam_filename\\n\" as header."
     )]
     sample_to_bam_tsv_path: PathBuf,
     #[arg(
@@ -48,7 +48,7 @@ struct Cli {
         \u{20} 2) cell_barcode_input: input cell barcode (as written in input BAM files)\n\
         \u{20} 3) cell_barcode_output: output cell barcode (as to be written to output cluster BAM file)\n\
         \u{20} 4) sample: sample name (same name as used in sample to BAM filename mapping TSV file)\n\
-        with \"cluster\\tcell_barcode_input\\tcell_barcode_output\\tsample\" as header."
+        with \"cluster\\tcell_barcode_input\\tcell_barcode_output\\tsample\\n\" as header."
     )]
     cluster_to_cb_and_sample_tsv_path: PathBuf,
     #[arg(
