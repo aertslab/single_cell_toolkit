@@ -445,6 +445,51 @@ fn get_non_hd_sq_and_fix_pg_bam_header_lines(header: &Header, sample: &str) -> V
         .join(&b"\n"[..])
 }
 
+/// Returns whether a read is part of a proper scATAC fragment pair.
+///
+/// A fragment read must be properly paired, have its mate on the same chromosome,
+/// have a mapping quality of at least 30, have an absolute insert size of at least
+/// 10, and be a primary alignment. Unless `ignore_mate_mapping_quality` is set,
+/// the mate mapping quality (`MQ`) tag must also be at least 30.
+fn is_fragment_read(record: &Record, ignore_mate_mapping_quality: bool) -> bool {
+    // Only keep reads that will be used to create scATAC-seq fragments.
+    //   - read is properly paired.
+    //   - read and its pair are located on the same chromosome.
+    //   - read and its pair have a mapping quality of 30 or higher.
+    //   - insert size is at least 10 in absolute value.
+    //   - read is primary alignment.
+    if !record.is_proper_pair()
+        || record.tid() != record.mtid()
+        || record.mapq() < 30
+        || record.insert_size().abs() < 10
+        || record.is_secondary()
+        || record.is_supplementary()
+    {
+        return false;
+    }
+
+    if ignore_mate_mapping_quality {
+        return true;
+    }
+
+    let Ok(mate_mapq_aux) = record.aux(b"MQ") else {
+        return false;
+    };
+
+    // So far MQ tags in BAM files have been of I8 or U8 type.
+    let mate_mapq = match mate_mapq_aux {
+        Aux::I8(mate_mapq) => mate_mapq as i32,
+        Aux::I16(mate_mapq) => mate_mapq as i32,
+        Aux::I32(mate_mapq) => mate_mapq,
+        Aux::U8(mate_mapq) => mate_mapq as i32,
+        Aux::U16(mate_mapq) => mate_mapq as i32,
+        Aux::U32(mate_mapq) => mate_mapq as i32,
+        _ => -1,
+    };
+
+    mate_mapq >= 30
+}
+
 fn split_bams_per_cluster(
     bam_to_sample_mapping: &BamToSampleBTreeMapping,
     cluster_to_samples_mapping: &ClusterToSamplesMapping,
@@ -682,56 +727,10 @@ fn split_bams_per_cluster(
                             continue;
                         }
 
-                        // Keep only read that will be used to create scATAC-seq fragment or all
-                        // reads, depending on the settings.
-                        let keep_read = match fragment_reads_only {
-                            true => {
-                                let mut keep_read = false;
-
-                                // Only keep reads that will be used to create scATAC-seq fragments.
-                                //   - read is properly paired.
-                                //   - read and its pair are located on the same chromosome.
-                                //   - read and its pair have a mapping quality of 30 or higher.
-                                //   - insert size is at least 10 in absolute value.
-                                //   - read is primary alignment.
-                                if record.is_proper_pair()
-                                    && record.tid() == record.mtid()
-                                    && record.mapq() >= 30
-                                    && record.insert_size().abs() >= 10
-                                    && !record.is_secondary()
-                                    && !record.is_supplementary()
-                                {
-                                    if !ignore_mate_mapping_quality {
-                                        if let Ok(mate_mapq_aux) = record.aux(b"MQ") {
-                                            // So far MQ tags in BAM files have been of I8 or U8 type.
-                                            let mate_mapq = match mate_mapq_aux {
-                                                Aux::I8(mate_mapq) => mate_mapq as i32,
-                                                Aux::I16(mate_mapq) => mate_mapq as i32,
-                                                Aux::I32(mate_mapq) => mate_mapq,
-                                                Aux::U8(mate_mapq) => mate_mapq as i32,
-                                                Aux::U16(mate_mapq) => mate_mapq as i32,
-                                                Aux::U32(mate_mapq) => mate_mapq as i32,
-                                                _ => -1, // bail!("Value for MQ tag is not an integer."),
-                                            };
-
-                                            if mate_mapq >= 30 {
-                                                // Keep current BAM record.
-                                                keep_read = true;
-                                            }
-                                        }
-                                    } else {
-                                        // Keep current BAM record regardless of mate mapping quality.
-                                        keep_read = true;
-                                    }
-                                }
-
-                                keep_read
-                            }
-                            false => true,
-                        };
-
-                        if !keep_read {
-                            // Skip unwanted reads.
+                        if fragment_reads_only
+                            && !is_fragment_read(&record, ignore_mate_mapping_quality)
+                        {
+                            // Skip reads that are not from a proper scATAC fragment pair.
                             continue;
                         }
 
