@@ -200,11 +200,9 @@ impl_display_for_string_newtype!(
 );
 
 #[derive(Clone, Debug, Default)]
-struct BamToSampleMapping {
-    bam_to_sample: HashMap<BamFilename, Sample>,
-}
-
-#[derive(Clone, Debug, Default)]
+// A BTreeMap ensures deterministic per-cluster BAM output by reading BAM files
+// in key order for every chunk. Records with the same start position therefore
+// retain a consistent order across input BAM files.
 struct BamToSampleBTreeMapping {
     bam_to_sample: BTreeMap<BamFilename, Sample>,
 }
@@ -261,7 +259,7 @@ impl<T, Item: PartialEq<T>> ContainsSlice<T> for [Item] {
 }
 
 fn read_sample_to_bam_tsv_file(sample_to_bam_tsv_path: &Path) -> Result<BamToSampleBTreeMapping> {
-    let mut bam_to_sample_mapping = BamToSampleMapping::default();
+    let mut bam_to_sample_mapping = BamToSampleBTreeMapping::default();
 
     // Build a CSV reader for a plain TSV file.
     let mut rdr = csv::ReaderBuilder::new()
@@ -276,18 +274,14 @@ fn read_sample_to_bam_tsv_file(sample_to_bam_tsv_path: &Path) -> Result<BamToSam
     for result in rdr.deserialize() {
         let sample_to_bam_record: SampleToBamRecord = result?;
 
-        // Add sample to BAM filename mapping to the hashmap.
+        // Add sample to BAM filename mapping.
         bam_to_sample_mapping
             .bam_to_sample
             .entry(sample_to_bam_record.bam_filename)
             .or_insert(sample_to_bam_record.sample);
     }
 
-    // Create a BTreeMap from the BAM to sample HashMap to have a deterministic read
-    // order in the output cluster BAM files for reads with the same start position.
-    Ok(BamToSampleBTreeMapping {
-        bam_to_sample: bam_to_sample_mapping.bam_to_sample.into_iter().collect(),
-    })
+    Ok(bam_to_sample_mapping)
 }
 
 fn read_cluster_to_cb_and_sample_tsv_file(
