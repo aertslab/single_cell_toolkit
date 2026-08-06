@@ -750,9 +750,10 @@ fn split_bams_per_cluster(
                                 } = cb_output_and_cluster;
 
                                 // Update CB tag value with full barcode name.
-                                record.remove_aux(cb_tag.as_bytes())?;
-                                record
-                                    .push_aux(cb_tag.as_bytes(), Aux::String(cb_output.as_str()))?;
+                                record.update_aux(
+                                    cb_tag.as_bytes(),
+                                    Aux::String(cb_output.as_str()),
+                                )?;
 
                                 // Add current BAM record to correct per cluster vector.
                                 if let Some(cluster_bam_records) =
