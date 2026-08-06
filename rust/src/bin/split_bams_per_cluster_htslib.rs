@@ -1,8 +1,7 @@
 use std::collections::BTreeMap;
-use std::error::Error;
 use std::path::{Path, PathBuf};
-use std::process;
 
+use anyhow::{bail, Context, Result};
 use clap::Parser;
 use hashbrown::{HashMap, HashSet};
 
@@ -163,9 +162,7 @@ impl<T, Item: PartialEq<T>> ContainsSlice<T> for [Item] {
     }
 }
 
-fn read_sample_to_bam_tsv_file(
-    sample_to_bam_tsv_path: &Path,
-) -> Result<BamToSampleBTreeMapping, Box<dyn Error>> {
+fn read_sample_to_bam_tsv_file(sample_to_bam_tsv_path: &Path) -> Result<BamToSampleBTreeMapping> {
     let mut bam_to_sample_mapping: BamToSampleMapping = BamToSampleMapping::new();
 
     // Build a CSV reader for a plain TSV file.
@@ -200,13 +197,10 @@ fn read_sample_to_bam_tsv_file(
 
 fn read_cluster_to_cb_and_sample_tsv_file(
     cluster_to_cb_and_sample_tsv_path: &Path,
-) -> Result<
-    (
-        ClusterToSamplesMapping,
-        SampleToCellBarcodeInputToCellBarcodeOutputAndClusterMapping,
-    ),
-    Box<dyn Error>,
-> {
+) -> Result<(
+    ClusterToSamplesMapping,
+    SampleToCellBarcodeInputToCellBarcodeOutputAndClusterMapping,
+)> {
     let mut cluster_to_samples_mapping: ClusterToSamplesMapping = ClusterToSamplesMapping::new();
 
     let mut sample_to_cb_input_to_cb_output_and_cluster_mapping: SampleToCellBarcodeInputToCellBarcodeOutputAndClusterMapping = SampleToCellBarcodeInputToCellBarcodeOutputAndClusterMapping::new();
@@ -340,14 +334,14 @@ fn split_bams_per_cluster(
     cb_tag: &Option<String>,
     chunk_size: u64,
     cmd_line_str: &str,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<()> {
     let cb_tag = match cb_tag {
         None => b"CB",
         Some(cb_tag_value) => {
             cb_tag_value
                 .as_bytes()
                 .try_into()
-                .expect("SAM tag for barcode should be exactly 2 characters long.")
+                .context("SAM tag for barcode should be exactly 2 characters long.")?
         }
     };
 
@@ -386,57 +380,79 @@ fn split_bams_per_cluster(
         let mut hd_and_sq_bam_header_lines: Option<Vec<u8>> = None;
         let mut sq_bam_header_lines: Option<Vec<u8>> = None;
 
-        bam_filenames.iter().enumerate().try_for_each(|(i, bam_filename)| {
-            let bam = bam_file_to_bam_indexed_reader_mapping
-                .entry(bam_filename.to_string())
-                .or_insert({
-                    let mut indexed_input_bam = IndexedReader::from_path(Path::new(bam_filename))?;
-                    indexed_input_bam.set_thread_pool(&bam_thread_pool)?;
-                    indexed_input_bam
-                });
+        bam_filenames
+            .iter()
+            .enumerate()
+            .try_for_each(|(i, bam_filename)| {
+                let bam = bam_file_to_bam_indexed_reader_mapping
+                    .entry(bam_filename.to_string())
+                    .or_insert({
+                        let mut indexed_input_bam =
+                            IndexedReader::from_path(Path::new(bam_filename))?;
+                        indexed_input_bam.set_thread_pool(&bam_thread_pool)?;
+                        indexed_input_bam
+                    });
 
-            // Read BAM header from current sample BAM file.
-            let original_header = Header::from_template(bam.header());
+                // Read BAM header from current sample BAM file.
+                let original_header = Header::from_template(bam.header());
 
-            // Get "@HD" and "@SQ" lines and check if they match exactly with those
-            // lines in the first sample BAM file.
-            match i {
-                0 => {
-                    if get_hd_coordinate_sorted_bam_header_lines(&original_header) {
-                        Err(format!("BAM file \"{}\" for cluster \"{}\" is not coordinate sorted.", bam_filename, cluster))?
+                // Get "@HD" and "@SQ" lines and check if they match exactly with those
+                // lines in the first sample BAM file.
+                match i {
+                    0 => {
+                        if get_hd_coordinate_sorted_bam_header_lines(&original_header) {
+                            bail!(
+                                "BAM file \"{}\" for cluster \"{}\" is not coordinate sorted.",
+                                bam_filename,
+                                cluster
+                            );
+                        }
+
+                        hd_and_sq_bam_header_lines =
+                            Some(get_hd_and_sq_bam_header_lines(&original_header));
+                        merged_header.extend(
+                            hd_and_sq_bam_header_lines
+                                .as_ref()
+                                .context("missing @HD/@SQ header lines")?,
+                        );
+
+                        sq_bam_header_lines = Some(get_sq_bam_header_lines(&original_header));
                     }
+                    _ => {
+                        if get_hd_coordinate_sorted_bam_header_lines(&original_header) {
+                            bail!(
+                                "BAM file \"{}\" for cluster \"{}\" is not coordinate sorted.",
+                                bam_filename,
+                                cluster
+                            );
+                        }
 
-                    hd_and_sq_bam_header_lines =
-                        Some(get_hd_and_sq_bam_header_lines(&original_header));
-                    merged_header.extend(&hd_and_sq_bam_header_lines.clone().unwrap());
-
-                    sq_bam_header_lines =
-                        Some(get_sq_bam_header_lines(&original_header));
+                        if get_sq_bam_header_lines(&original_header)
+                            != *sq_bam_header_lines
+                                .as_ref()
+                                .context("missing @SQ header lines")?
+                        {
+                            bail!(
+                            "BAM file \"{}\" for cluster \"{}\" has different chromosome order.",
+                            bam_filename,
+                            cluster
+                        );
+                        }
+                    }
                 }
-                _ => {
-                    if get_hd_coordinate_sorted_bam_header_lines(&original_header) {
-                        Err(format!("BAM file \"{}\" for cluster \"{}\" is not coordinate sorted.", bam_filename, cluster))?
-                    }
 
-                    if get_sq_bam_header_lines(&original_header)
-                        != sq_bam_header_lines.clone().unwrap()
-                    {
-                        Err(format!("BAM file \"{}\" for cluster \"{}\" has different chromosome order.", bam_filename, cluster))?
-                    }
-                }
-            }
+                // Get all "@PG", "@CO" and "@RG" lines.
+                let non_hd_sq_and_fix_pg_bam_header_lines =
+                    get_non_hd_sq_and_fix_pg_bam_header_lines(
+                        &original_header,
+                        bam_to_sample_mapping.get(bam_filename.as_str()).unwrap(),
+                    );
 
-            // Get all "@PG", "@CO" and "@RG" lines.
-            let non_hd_sq_and_fix_pg_bam_header_lines = get_non_hd_sq_and_fix_pg_bam_header_lines(
-                &original_header,
-                bam_to_sample_mapping.get(bam_filename.as_str()).unwrap(),
-            );
+                merged_header.extend(&b"\n"[..]);
+                merged_header.extend(&non_hd_sq_and_fix_pg_bam_header_lines);
 
-            merged_header.extend(&b"\n"[..]);
-            merged_header.extend(&non_hd_sq_and_fix_pg_bam_header_lines);
-
-            Ok::<(), Box<dyn Error>>(())
-        })?;
+                Ok::<(), anyhow::Error>(())
+            })?;
 
         // Add "@PG" header line for "split_bams_per_cluster_htslib".
         let pg_header_line = format!(
@@ -488,7 +504,7 @@ fn split_bams_per_cluster(
     // them by position before writing them to the per cluster BAM file.
     for tid in 0..merged_header_view.target_count() {
         let chrom_name = std::str::from_utf8(merged_header_view.tid2name(tid))
-            .expect("Chromosome name is not valid UTF-8.")
+            .context("Chromosome name is not valid UTF-8.")?
             .to_string();
         if chromosomes.is_some() && !chromosomes.as_ref().unwrap().contains(&chrom_name) {
             continue;
@@ -647,7 +663,7 @@ fn split_bams_per_cluster(
     Ok(())
 }
 
-fn main() {
+fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let cmd_line_str = format!(
@@ -657,24 +673,24 @@ fn main() {
         &cli.output_prefix.to_string_lossy()
     );
 
-    let bam_to_sample_mapping = match read_sample_to_bam_tsv_file(&cli.sample_to_bam_tsv_path) {
-        Ok(sample_to_bam_mapping) => sample_to_bam_mapping,
-        Err(e) => {
-            println!("Error: {}", e);
-            process::exit(1);
-        }
-    };
+    let bam_to_sample_mapping = read_sample_to_bam_tsv_file(&cli.sample_to_bam_tsv_path)
+        .with_context(|| {
+            format!(
+                "failed to read sample to BAM filename mapping TSV file \"{}\"",
+                cli.sample_to_bam_tsv_path.display()
+            )
+        })?;
 
     let (cluster_to_samples_mapping, sample_to_cb_input_to_cb_output_and_cluster_mapping) =
-        match read_cluster_to_cb_and_sample_tsv_file(&cli.cluster_to_cb_and_sample_tsv_path) {
-            Ok(cluster_to_cb_sample_mapping) => cluster_to_cb_sample_mapping,
-            Err(e) => {
-                println!("Error: {}", e);
-                process::exit(1);
-            }
-        };
+        read_cluster_to_cb_and_sample_tsv_file(&cli.cluster_to_cb_and_sample_tsv_path)
+            .with_context(|| {
+                format!(
+                    "failed to read cluster to cell barcode and sample mapping TSV file \"{}\"",
+                    cli.cluster_to_cb_and_sample_tsv_path.display()
+                )
+            })?;
 
-    match split_bams_per_cluster(
+    split_bams_per_cluster(
         &bam_to_sample_mapping,
         &cluster_to_samples_mapping,
         &sample_to_cb_input_to_cb_output_and_cluster_mapping,
@@ -685,11 +701,8 @@ fn main() {
         &cli.cb_tag,
         cli.chunk_size,
         &cmd_line_str,
-    ) {
-        Ok(()) => (),
-        Err(e) => {
-            println!("Error: {}", e);
-            process::exit(1);
-        }
-    };
+    )
+    .context("failed to split BAM files per cluster")?;
+
+    Ok(())
 }
