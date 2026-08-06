@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::{bail, Context, Result};
 use clap::Parser;
@@ -96,10 +97,11 @@ struct Cli {
         short = 't',
         long = "cb_tag",
         required = false,
-        help = "SAM tag to use to look for the cell barcodes in the BAM files. Default: `CB`.",
-        long_help = "SAM tag to use to look for the cell barcodes in the BAM files. Default: `CB`."
+        default_value = "CB",
+        help = "SAM tag to use to look for the cell barcodes in the BAM files.",
+        long_help = "SAM tag to use to look for the cell barcodes in the BAM files."
     )]
-    cb_tag: Option<String>,
+    cb_tag: CellBarcodeTag,
     #[arg(
         short = 'C',
         long = "chunk_size",
@@ -242,6 +244,32 @@ struct BamFileToBamIndexedReaderMapping {
 #[derive(Default)]
 struct ClusterToBamWriterMapping {
     cluster_to_writer: HashMap<Cluster, Writer>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct CellBarcodeTag([u8; 2]);
+
+impl CellBarcodeTag {
+    fn as_bytes(&self) -> &[u8; 2] {
+        &self.0
+    }
+}
+
+impl Default for CellBarcodeTag {
+    fn default() -> Self {
+        Self(*b"CB")
+    }
+}
+
+impl FromStr for CellBarcodeTag {
+    type Err = &'static str;
+
+    fn from_str(tag: &str) -> std::result::Result<Self, Self::Err> {
+        tag.as_bytes()
+            .try_into()
+            .map(Self)
+            .map_err(|_| "SAM tag for barcode should be exactly 2 characters long.")
+    }
 }
 
 trait ContainsSlice<T>: PartialEq<[T]> {
@@ -425,20 +453,10 @@ fn split_bams_per_cluster(
     chromosomes: &Option<Vec<String>>,
     fragment_reads_only: bool,
     ignore_mate_mapping_quality: bool,
-    cb_tag: &Option<String>,
+    cb_tag: &CellBarcodeTag,
     chunk_size: u64,
     cmd_line_str: &str,
 ) -> Result<()> {
-    let cb_tag = match cb_tag {
-        None => b"CB",
-        Some(cb_tag_value) => {
-            cb_tag_value
-                .as_bytes()
-                .try_into()
-                .context("SAM tag for barcode should be exactly 2 characters long.")?
-        }
-    };
-
     let bam_thread_pool = ThreadPool::new(16)?;
     let mut bam_file_to_bam_indexed_reader_mapping = BamFileToBamIndexedReaderMapping::default();
     let mut cluster_to_bam_writer_mapping = ClusterToBamWriterMapping::default();
@@ -717,7 +735,7 @@ fn split_bams_per_cluster(
                             continue;
                         }
 
-                        if let Ok(Aux::String(cb)) = record.aux(cb_tag) {
+                        if let Ok(Aux::String(cb)) = record.aux(cb_tag.as_bytes()) {
                             // Add BAM record with updated full barcode name to per
                             // cluster vector, if the barcode was in the list of
                             // filtered barcodes.
@@ -732,8 +750,9 @@ fn split_bams_per_cluster(
                                 } = cb_output_and_cluster;
 
                                 // Update CB tag value with full barcode name.
-                                record.remove_aux(cb_tag)?;
-                                record.push_aux(cb_tag, Aux::String(cb_output.as_str()))?;
+                                record.remove_aux(cb_tag.as_bytes())?;
+                                record
+                                    .push_aux(cb_tag.as_bytes(), Aux::String(cb_output.as_str()))?;
 
                                 // Add current BAM record to correct per cluster vector.
                                 if let Some(cluster_bam_records) =
