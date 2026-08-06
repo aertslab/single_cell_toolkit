@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fmt;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
@@ -116,37 +117,134 @@ struct Cli {
 // Sample name to BAM filename TSV record.
 #[derive(Debug, Deserialize)]
 struct SampleToBamRecord {
-    sample: String,
-    bam_filename: String,
+    sample: Sample,
+    bam_filename: BamFilename,
 }
 
 // Cluster to orginal cell barcode, new cell barcode and sample name TSV file record.
 #[derive(Debug, Deserialize)]
 struct ClusterToCbSampleRecord {
-    cluster: String,
-    cell_barcode_input: String,
-    cell_barcode_output: String,
-    sample: String,
+    cluster: Cluster,
+    cell_barcode_input: CellBarcodeInput,
+    cell_barcode_output: CellBarcodeOutput,
+    sample: Sample,
 }
 
-type BamToSampleMapping = HashMap<String, String>;
-type BamToSampleBTreeMapping = BTreeMap<String, String>;
+#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd)]
+struct BamFilename(String);
 
-type SampleSet = HashSet<String>;
-type ClusterToSamplesMapping = HashMap<String, SampleSet>;
+impl BamFilename {
+    fn as_str(&self) -> &str {
+        &self.0
+    }
 
+    fn as_path(&self) -> &Path {
+        Path::new(self.as_str())
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd)]
+struct Sample(String);
+
+impl Sample {
+    fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd)]
+struct Cluster(String);
+
+impl Cluster {
+    fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd)]
+struct CellBarcodeInput(String);
+
+impl CellBarcodeInput {
+    fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd)]
+struct CellBarcodeOutput(String);
+
+impl CellBarcodeOutput {
+    fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+macro_rules! impl_display_for_string_newtype {
+    ($($type:ty),+ $(,)?) => {
+        $(
+            impl fmt::Display for $type {
+                fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    self.as_str().fmt(formatter)
+                }
+            }
+        )+
+    };
+}
+
+impl_display_for_string_newtype!(
+    BamFilename,
+    Sample,
+    Cluster,
+    CellBarcodeInput,
+    CellBarcodeOutput,
+);
+
+#[derive(Clone, Debug, Default)]
+struct BamToSampleMapping {
+    bam_to_sample: HashMap<BamFilename, Sample>,
+}
+
+#[derive(Clone, Debug, Default)]
+struct BamToSampleBTreeMapping {
+    bam_to_sample: BTreeMap<BamFilename, Sample>,
+}
+
+#[derive(Clone, Debug, Default)]
+struct SampleSet {
+    samples: HashSet<Sample>,
+}
+
+#[derive(Clone, Debug, Default)]
+struct ClusterToSamplesMapping {
+    cluster_to_samples: HashMap<Cluster, SampleSet>,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 struct CellBarcodeOutputAndCluster {
-    cell_barcode_output: String,
-    cluster: String,
+    cell_barcode_output: CellBarcodeOutput,
+    cluster: Cluster,
 }
 
-type CellBarcodeInputToCellBarcodeOutputAndClusterMapping =
-    HashMap<String, CellBarcodeOutputAndCluster>;
-type SampleToCellBarcodeInputToCellBarcodeOutputAndClusterMapping =
-    HashMap<String, CellBarcodeInputToCellBarcodeOutputAndClusterMapping>;
+#[derive(Clone, Debug, Default)]
+struct CellBarcodeInputToCellBarcodeOutputAndClusterMapping {
+    cb_input_to_cb_output_and_cluster: HashMap<CellBarcodeInput, CellBarcodeOutputAndCluster>,
+}
 
-type BamFileToBamIndexedReaderMapping = HashMap<String, IndexedReader>;
-type ClusterToBamWriterMapping = HashMap<String, Writer>;
+#[derive(Clone, Debug, Default)]
+struct SampleToCellBarcodeInputToCellBarcodeOutputAndClusterMapping {
+    sample_to_cb_and_cluster_mapping:
+        HashMap<Sample, CellBarcodeInputToCellBarcodeOutputAndClusterMapping>,
+}
+
+#[derive(Default)]
+struct BamFileToBamIndexedReaderMapping {
+    bam_to_reader: HashMap<BamFilename, IndexedReader>,
+}
+
+#[derive(Default)]
+struct ClusterToBamWriterMapping {
+    cluster_to_writer: HashMap<Cluster, Writer>,
+}
 
 trait ContainsSlice<T>: PartialEq<[T]> {
     fn contains_slice(&'_ self, slice: &'_ [T]) -> bool;
@@ -163,7 +261,7 @@ impl<T, Item: PartialEq<T>> ContainsSlice<T> for [Item] {
 }
 
 fn read_sample_to_bam_tsv_file(sample_to_bam_tsv_path: &Path) -> Result<BamToSampleBTreeMapping> {
-    let mut bam_to_sample_mapping: BamToSampleMapping = BamToSampleMapping::new();
+    let mut bam_to_sample_mapping = BamToSampleMapping::default();
 
     // Build a CSV reader for a plain TSV file.
     let mut rdr = csv::ReaderBuilder::new()
@@ -180,19 +278,16 @@ fn read_sample_to_bam_tsv_file(sample_to_bam_tsv_path: &Path) -> Result<BamToSam
 
         // Add sample to BAM filename mapping to the hashmap.
         bam_to_sample_mapping
-            .entry(sample_to_bam_record.bam_filename.clone())
-            .or_insert(sample_to_bam_record.sample.clone());
+            .bam_to_sample
+            .entry(sample_to_bam_record.bam_filename)
+            .or_insert(sample_to_bam_record.sample);
     }
 
     // Create a BTreeMap from the BAM to sample HashMap to have a deterministic read
     // order in the output cluster BAM files for reads with the same start position.
-    let bam_to_sample_mapping: BamToSampleBTreeMapping = bam_to_sample_mapping
-        .iter()
-        .sorted_by_key(|(k, _v)| *k)
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect::<_>();
-
-    Ok(bam_to_sample_mapping)
+    Ok(BamToSampleBTreeMapping {
+        bam_to_sample: bam_to_sample_mapping.bam_to_sample.into_iter().collect(),
+    })
 }
 
 fn read_cluster_to_cb_and_sample_tsv_file(
@@ -201,9 +296,10 @@ fn read_cluster_to_cb_and_sample_tsv_file(
     ClusterToSamplesMapping,
     SampleToCellBarcodeInputToCellBarcodeOutputAndClusterMapping,
 )> {
-    let mut cluster_to_samples_mapping: ClusterToSamplesMapping = ClusterToSamplesMapping::new();
+    let mut cluster_to_samples_mapping = ClusterToSamplesMapping::default();
 
-    let mut sample_to_cb_input_to_cb_output_and_cluster_mapping: SampleToCellBarcodeInputToCellBarcodeOutputAndClusterMapping = SampleToCellBarcodeInputToCellBarcodeOutputAndClusterMapping::new();
+    let mut sample_to_cb_input_to_cb_output_and_cluster_mapping =
+        SampleToCellBarcodeInputToCellBarcodeOutputAndClusterMapping::default();
 
     // Build a CSV reader for a plain TSV file.
     let mut rdr = csv::ReaderBuilder::new()
@@ -220,8 +316,10 @@ fn read_cluster_to_cb_and_sample_tsv_file(
 
         // Create cluster to samples mapping.
         cluster_to_samples_mapping
+            .cluster_to_samples
             .entry(cluster_to_cb_sample_record.cluster.clone())
             .or_default()
+            .samples
             .insert(cluster_to_cb_sample_record.sample.clone());
 
         // Create nested hashmap with multiple levels:
@@ -229,12 +327,14 @@ fn read_cluster_to_cb_and_sample_tsv_file(
         //   - level 2: Cell barcode input to cell barcode output mapping
         //   - level 3: Cell barcode output to cluster mapping
         sample_to_cb_input_to_cb_output_and_cluster_mapping
-            .entry(cluster_to_cb_sample_record.sample.clone())
+            .sample_to_cb_and_cluster_mapping
+            .entry(cluster_to_cb_sample_record.sample)
             .or_default()
-            .entry(cluster_to_cb_sample_record.cell_barcode_input.clone())
+            .cb_input_to_cb_output_and_cluster
+            .entry(cluster_to_cb_sample_record.cell_barcode_input)
             .or_insert(CellBarcodeOutputAndCluster {
-                cell_barcode_output: cluster_to_cb_sample_record.cell_barcode_output.clone(),
-                cluster: cluster_to_cb_sample_record.cluster.clone(),
+                cell_barcode_output: cluster_to_cb_sample_record.cell_barcode_output,
+                cluster: cluster_to_cb_sample_record.cluster,
             });
     }
 
@@ -346,11 +446,14 @@ fn split_bams_per_cluster(
     };
 
     let bam_thread_pool = ThreadPool::new(16)?;
-    let mut bam_file_to_bam_indexed_reader_mapping = BamFileToBamIndexedReaderMapping::new();
-    let mut cluster_to_bam_writer_mapping = ClusterToBamWriterMapping::new();
+    let mut bam_file_to_bam_indexed_reader_mapping = BamFileToBamIndexedReaderMapping::default();
+    let mut cluster_to_bam_writer_mapping = ClusterToBamWriterMapping::default();
 
     // Get all cluster names and sort them.
-    let mut clusters: Vec<&String> = cluster_to_samples_mapping.keys().collect();
+    let mut clusters: Vec<&Cluster> = cluster_to_samples_mapping
+        .cluster_to_samples
+        .keys()
+        .collect();
     clusters.sort_unstable();
 
     let mut cluster_to_bam_records: HashMap<String, Vec<Record>> = HashMap::new();
@@ -362,11 +465,14 @@ fn split_bams_per_cluster(
     for cluster in clusters.iter() {
         // Get all bam filenames per cluster and sort them.
         let mut bam_filenames = cluster_to_samples_mapping
-            .get(cluster.as_str())
+            .cluster_to_samples
+            .get(*cluster)
             .unwrap()
+            .samples
             .iter()
             .flat_map(|sample| {
                 bam_to_sample_mapping
+                    .bam_to_sample
                     .iter()
                     .filter(|(_bam_filename, s)| *s == sample)
                     .map(|(bam_filename, _sample)| bam_filename)
@@ -385,10 +491,11 @@ fn split_bams_per_cluster(
             .enumerate()
             .try_for_each(|(i, bam_filename)| {
                 let bam = bam_file_to_bam_indexed_reader_mapping
-                    .entry(bam_filename.to_string())
+                    .bam_to_reader
+                    .entry((*bam_filename).clone())
                     .or_insert({
                         let mut indexed_input_bam =
-                            IndexedReader::from_path(Path::new(bam_filename))?;
+                            IndexedReader::from_path(bam_filename.as_path())?;
                         indexed_input_bam.set_thread_pool(&bam_thread_pool)?;
                         indexed_input_bam
                     });
@@ -403,8 +510,8 @@ fn split_bams_per_cluster(
                         if get_hd_coordinate_sorted_bam_header_lines(&original_header) {
                             bail!(
                                 "BAM file \"{}\" for cluster \"{}\" is not coordinate sorted.",
-                                bam_filename,
-                                cluster
+                                bam_filename.as_str(),
+                                cluster.as_str()
                             );
                         }
 
@@ -422,8 +529,8 @@ fn split_bams_per_cluster(
                         if get_hd_coordinate_sorted_bam_header_lines(&original_header) {
                             bail!(
                                 "BAM file \"{}\" for cluster \"{}\" is not coordinate sorted.",
-                                bam_filename,
-                                cluster
+                                bam_filename.as_str(),
+                                cluster.as_str()
                             );
                         }
 
@@ -434,8 +541,8 @@ fn split_bams_per_cluster(
                         {
                             bail!(
                             "BAM file \"{}\" for cluster \"{}\" has different chromosome order.",
-                            bam_filename,
-                            cluster
+                            bam_filename.as_str(),
+                            cluster.as_str()
                         );
                         }
                     }
@@ -445,7 +552,11 @@ fn split_bams_per_cluster(
                 let non_hd_sq_and_fix_pg_bam_header_lines =
                     get_non_hd_sq_and_fix_pg_bam_header_lines(
                         &original_header,
-                        bam_to_sample_mapping.get(bam_filename.as_str()).unwrap(),
+                        bam_to_sample_mapping
+                            .bam_to_sample
+                            .get(*bam_filename)
+                            .unwrap()
+                            .as_str(),
                     );
 
                 merged_header.extend(&b"\n"[..]);
@@ -469,7 +580,7 @@ fn split_bams_per_cluster(
         let mut cluster_bam_path = PathBuf::from(output_prefix);
         cluster_bam_path
             .as_mut_os_string()
-            .push(format!("{}.bam", cluster));
+            .push(format!("{}.bam", cluster.as_str()));
 
         let mut cluster_bam_writer =
             Writer::from_path(&cluster_bam_path, &merged_header, Format::Bam)?;
@@ -477,7 +588,8 @@ fn split_bams_per_cluster(
         cluster_bam_writer.set_thread_pool(&bam_thread_pool)?;
         cluster_bam_writer.set_compression_level(CompressionLevel::Fastest)?;
         cluster_to_bam_writer_mapping
-            .entry(cluster.to_string())
+            .cluster_to_writer
+            .entry((*cluster).clone())
             .or_insert(cluster_bam_writer);
 
         // Create empty vector to store BAM records for current cluster.
@@ -494,11 +606,18 @@ fn split_bams_per_cluster(
     let merged_header_view = merged_header_view.unwrap();
 
     // Filter out BAM files that are not in any requested cluster.
-    let bam_to_sample_mapping: BamToSampleBTreeMapping = bam_to_sample_mapping
-        .iter()
-        .filter(|(k, _v)| bam_file_to_bam_indexed_reader_mapping.get(*k).is_some())
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect();
+    let bam_to_sample_mapping = BamToSampleBTreeMapping {
+        bam_to_sample: bam_to_sample_mapping
+            .bam_to_sample
+            .iter()
+            .filter(|(bam_filename, _sample)| {
+                bam_file_to_bam_indexed_reader_mapping
+                    .bam_to_reader
+                    .contains_key(*bam_filename)
+            })
+            .map(|(bam_filename, sample)| (bam_filename.clone(), sample.clone()))
+            .collect(),
+    };
 
     // Loop over each chromosome and fetch reads in chunks from each BAM file and sort
     // them by position before writing them to the per cluster BAM file.
@@ -523,9 +642,11 @@ fn split_bams_per_cluster(
             let end = end as i64;
 
             bam_to_sample_mapping
+                .bam_to_sample
                 .iter()
                 .try_for_each(|(bam_filename, sample)| {
                     let indexed_input_bam = bam_file_to_bam_indexed_reader_mapping
+                        .bam_to_reader
                         .get_mut(bam_filename)
                         .unwrap();
                     // Fetch chunk from current BAM file (coordinates are 0-based, and end is exclusive).
@@ -533,6 +654,7 @@ fn split_bams_per_cluster(
 
                     let sample_to_cb_input_to_cb_output_and_cluster_mapping =
                         sample_to_cb_input_to_cb_output_and_cluster_mapping
+                            .sample_to_cb_and_cluster_mapping
                             .get(sample)
                             .unwrap();
 
@@ -606,7 +728,9 @@ fn split_bams_per_cluster(
                             // cluster vector, if the barcode was in the list of
                             // filtered barcodes.
                             if let Some(cb_output_and_cluster) =
-                                sample_to_cb_input_to_cb_output_and_cluster_mapping.get(cb)
+                                sample_to_cb_input_to_cb_output_and_cluster_mapping
+                                    .cb_input_to_cb_output_and_cluster
+                                    .get(&CellBarcodeInput(cb.to_owned()))
                             {
                                 let CellBarcodeOutputAndCluster {
                                     cell_barcode_output: cb_output,
@@ -615,7 +739,7 @@ fn split_bams_per_cluster(
 
                                 // Update CB tag value with full barcode name.
                                 record.remove_aux(cb_tag)?;
-                                record.push_aux(cb_tag, Aux::String(cb_output))?;
+                                record.push_aux(cb_tag, Aux::String(cb_output.as_str()))?;
 
                                 // Add current BAM record to correct per cluster vector.
                                 if let Some(cluster_bam_records) =
@@ -646,8 +770,10 @@ fn split_bams_per_cluster(
                         "Writing chunk {}:{}-{} for cluster {}",
                         chrom_name, start, end, cluster
                     );
-                    let cluster_bam_writer =
-                        cluster_to_bam_writer_mapping.get_mut(cluster).unwrap();
+                    let cluster_bam_writer = cluster_to_bam_writer_mapping
+                        .cluster_to_writer
+                        .get_mut(&Cluster(cluster.clone()))
+                        .unwrap();
 
                     for record in cluster_bam_records.iter() {
                         cluster_bam_writer.write(record)?;
