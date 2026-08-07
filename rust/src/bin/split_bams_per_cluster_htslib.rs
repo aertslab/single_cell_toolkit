@@ -374,24 +374,38 @@ fn has_coordinate_sorted_bam_header(header: &Header) -> bool {
         .any(|x| !x.is_empty() && (x.starts_with(b"@HD\t") && x.contains_slice(b"\tSO:coordinate")))
 }
 
+/// Returns the `@HD` and `@SQ` records from a BAM header.
+///
+/// The retained records are joined with newline separators in their original order.
 fn get_hd_and_sq_bam_header_lines(header: &Header) -> Vec<u8> {
-    // Only keep "@HD" and "@SQ" lines from BAM header.
     header
         .to_bytes()
         .split(|x| x == &b'\n')
         .filter(|x| !x.is_empty() && (x.starts_with(b"@HD\t") || x.starts_with(b"@SQ\t")))
-        .collect::<Vec<_>>()
-        .join(&b"\n"[..])
+        .fold(Vec::new(), |mut header_lines, line| {
+            if !header_lines.is_empty() {
+                header_lines.push(b'\n');
+            }
+            header_lines.extend_from_slice(line);
+            header_lines
+        })
 }
 
+/// Returns the `@SQ` records from a BAM header.
+///
+/// The retained records are joined with newline separators in their original order.
 fn get_sq_bam_header_lines(header: &Header) -> Vec<u8> {
-    // Only keep "@HD" and "@SQ" lines from BAM header.
     header
         .to_bytes()
         .split(|x| x == &b'\n')
         .filter(|x| !x.is_empty() && (x.starts_with(b"@SQ\t")))
-        .collect::<Vec<_>>()
-        .join(&b"\n"[..])
+        .fold(Vec::new(), |mut header_lines, line| {
+            if !header_lines.is_empty() {
+                header_lines.push(b'\n');
+            }
+            header_lines.extend_from_slice(line);
+            header_lines
+        })
 }
 
 /// Appends `.{sample}` to `ID:` and `PP:` fields in an `@PG` header line.
@@ -401,18 +415,21 @@ fn get_sq_bam_header_lines(header: &Header) -> Vec<u8> {
 fn suffix_pg_id_and_pp_fields(pg_line: &[u8], sample: &str) -> Vec<u8> {
     pg_line
         .split(|byte| *byte == b'\t')
-        .map(|field| {
-            if field.starts_with(b"ID:") || field.starts_with(b"PP:") {
-                let mut suffixed_field = field.to_vec();
-                suffixed_field.push(b'.');
-                suffixed_field.extend(sample.as_bytes());
-                suffixed_field
-            } else {
-                field.to_vec()
+        .fold(Vec::new(), |mut suffixed_pg_line, field| {
+            if !suffixed_pg_line.is_empty() {
+                suffixed_pg_line.push(b'\t');
             }
+
+            if field.starts_with(b"ID:") || field.starts_with(b"PP:") {
+                suffixed_pg_line.extend_from_slice(field);
+                suffixed_pg_line.push(b'.');
+                suffixed_pg_line.extend(sample.as_bytes());
+            } else {
+                suffixed_pg_line.extend_from_slice(field);
+            }
+
+            suffixed_pg_line
         })
-        .collect::<Vec<_>>()
-        .join(&b'\t')
 }
 
 /// Returns non-`@HD` and non-`@SQ` BAM header lines for a sample.
@@ -424,13 +441,18 @@ fn get_non_hd_sq_and_fix_pg_bam_header_lines(header: &Header, sample: &str) -> V
         .to_bytes()
         .split(|x| x == &b'\n')
         .filter(|x| !x.is_empty() && !x.starts_with(b"@HD\t") && !x.starts_with(b"@SQ\t"))
-        .map(Vec::<u8>::from)
-        .map(|x| match x.starts_with(b"@PG\t") {
-            true => suffix_pg_id_and_pp_fields(&x, sample),
-            false => x,
+        .fold(Vec::new(), |mut header_lines, line| {
+            if !header_lines.is_empty() {
+                header_lines.push(b'\n');
+            }
+
+            match line.starts_with(b"@PG\t") {
+                true => header_lines.extend(suffix_pg_id_and_pp_fields(line, sample)),
+                false => header_lines.extend_from_slice(line),
+            }
+
+            header_lines
         })
-        .collect::<Vec<Vec<u8>>>()
-        .join(&b"\n"[..])
 }
 
 /// Returns whether a read is part of a proper scATAC fragment pair.
