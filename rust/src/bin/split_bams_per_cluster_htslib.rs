@@ -366,6 +366,14 @@ fn read_cluster_to_cb_and_sample_tsv_file(
     ))
 }
 
+/// Check if "@HD" line in BAM header contains "SO:coordinate".
+fn has_coordinate_sorted_bam_header(header: &Header) -> bool {
+    header
+        .to_bytes()
+        .split(|x| x == &b'\n')
+        .any(|x| !x.is_empty() && (x.starts_with(b"@HD\t") && x.contains_slice(b"\tSO:coordinate")))
+}
+
 fn get_hd_and_sq_bam_header_lines(header: &Header) -> Vec<u8> {
     // Only keep "@HD" and "@SQ" lines from BAM header.
     header
@@ -374,18 +382,6 @@ fn get_hd_and_sq_bam_header_lines(header: &Header) -> Vec<u8> {
         .filter(|x| !x.is_empty() && (x.starts_with(b"@HD\t") || x.starts_with(b"@SQ\t")))
         .collect::<Vec<_>>()
         .join(&b"\n"[..])
-}
-
-fn get_hd_coordinate_sorted_bam_header_lines(header: &Header) -> bool {
-    // Only keep "@HD" and "@SQ" lines from BAM header.
-    header
-        .to_bytes()
-        .split(|x| x == &b'\n')
-        .filter(|x| {
-            !x.is_empty() && (x.starts_with(b"@HD\t") && x.contains_slice(b"\tSO:coordinate"))
-        })
-        .collect::<Vec<_>>()
-        .is_empty()
 }
 
 fn get_sq_bam_header_lines(header: &Header) -> Vec<u8> {
@@ -564,7 +560,7 @@ fn split_bams_per_cluster(
                 // lines in the first sample BAM file.
                 match i {
                     0 => {
-                        if get_hd_coordinate_sorted_bam_header_lines(&original_header) {
+                        if !has_coordinate_sorted_bam_header(&original_header) {
                             bail!(
                                 "BAM file \"{}\" for cluster \"{}\" is not coordinate sorted.",
                                 bam_filename.as_str(),
@@ -583,7 +579,7 @@ fn split_bams_per_cluster(
                         sq_bam_header_lines = Some(get_sq_bam_header_lines(&original_header));
                     }
                     _ => {
-                        if get_hd_coordinate_sorted_bam_header_lines(&original_header) {
+                        if !has_coordinate_sorted_bam_header(&original_header) {
                             bail!(
                                 "BAM file \"{}\" for cluster \"{}\" is not coordinate sorted.",
                                 bam_filename.as_str(),
