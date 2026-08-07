@@ -116,16 +116,21 @@ struct Cli {
     chunk_size: u64,
 }
 
-// Sample name to BAM filename TSV record.
+/// A row in the sample-to-BAM-filename TSV file.
+///
+/// Associates a sample identifier with its input BAM filename.
 #[derive(Debug, Deserialize)]
-struct SampleToBamRecord {
+struct SampleBamFilenameRecord {
     sample: Sample,
     bam_filename: BamFilename,
 }
 
-// Cluster to orginal cell barcode, new cell barcode and sample name TSV file record.
+/// A row in the cluster-to-cell-barcode-and-sample TSV file.
+///
+/// Associates a cluster and sample with an input cell barcode from an input
+/// sample BAM file and an output cell barcode written to an output cluster BAM file.
 #[derive(Debug, Deserialize)]
-struct ClusterToCbSampleRecord {
+struct ClusterCbSampleRecord {
     cluster: Cluster,
     cell_barcode_input: CellBarcodeInput,
     cell_barcode_output: CellBarcodeOutput,
@@ -300,13 +305,13 @@ fn read_sample_to_bam_tsv_file(sample_to_bam_tsv_path: &Path) -> Result<BamToSam
         .from_path(sample_to_bam_tsv_path)?;
 
     for result in rdr.deserialize() {
-        let sample_to_bam_record: SampleToBamRecord = result?;
+        let sample_bam_filename_record: SampleBamFilenameRecord = result?;
 
         // Add sample to BAM filename mapping.
         bam_to_sample_mapping
             .bam_to_sample
-            .entry(sample_to_bam_record.bam_filename)
-            .or_insert(sample_to_bam_record.sample);
+            .entry(sample_bam_filename_record.bam_filename)
+            .or_insert(sample_bam_filename_record.sample);
     }
 
     Ok(bam_to_sample_mapping)
@@ -334,15 +339,15 @@ fn read_cluster_to_cb_and_sample_tsv_file(
         .from_path(cluster_to_cb_and_sample_tsv_path)?;
 
     for result in rdr.deserialize() {
-        let cluster_to_cb_sample_record: ClusterToCbSampleRecord = result?;
+        let cluster_cb_sample_record: ClusterCbSampleRecord = result?;
 
         // Create cluster to samples mapping.
         cluster_to_samples_mapping
             .cluster_to_samples
-            .entry(cluster_to_cb_sample_record.cluster.clone())
+            .entry(cluster_cb_sample_record.cluster.clone())
             .or_default()
             .samples
-            .insert(cluster_to_cb_sample_record.sample.clone());
+            .insert(cluster_cb_sample_record.sample.clone());
 
         // Create nested hashmap with multiple levels:
         //   - level 1: Sample name to cell barcode input mapping
@@ -350,13 +355,13 @@ fn read_cluster_to_cb_and_sample_tsv_file(
         //   - level 3: Cell barcode output to cluster mapping
         sample_to_cb_input_to_cb_output_and_cluster_mapping
             .sample_to_cb_and_cluster_mapping
-            .entry(cluster_to_cb_sample_record.sample)
+            .entry(cluster_cb_sample_record.sample)
             .or_default()
             .cb_input_to_cb_output_and_cluster
-            .entry(cluster_to_cb_sample_record.cell_barcode_input)
+            .entry(cluster_cb_sample_record.cell_barcode_input)
             .or_insert(CellBarcodeOutputAndCluster {
-                cell_barcode_output: cluster_to_cb_sample_record.cell_barcode_output,
-                cluster: cluster_to_cb_sample_record.cluster,
+                cell_barcode_output: cluster_cb_sample_record.cell_barcode_output,
+                cluster: cluster_cb_sample_record.cluster,
             });
     }
 
