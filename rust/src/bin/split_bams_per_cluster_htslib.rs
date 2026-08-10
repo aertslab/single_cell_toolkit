@@ -221,7 +221,7 @@ struct SampleSet {
 
 #[derive(Clone, Debug, Default)]
 struct ClusterToSamplesMapping {
-    cluster_to_samples: HashMap<Cluster, SampleSet>,
+    cluster_to_samples: BTreeMap<Cluster, SampleSet>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -521,31 +521,19 @@ fn split_bams_per_cluster(
     let mut bam_file_to_bam_indexed_reader_mapping = BamFileToBamIndexedReaderMapping::default();
     let mut cluster_to_bam_writer_mapping = ClusterToBamWriterMapping::default();
 
-    // Get all cluster names and sort them.
-    let mut clusters: Vec<&Cluster> = cluster_to_samples_mapping
-        .cluster_to_samples
-        .keys()
-        .collect();
-    clusters.sort_unstable();
-
     let mut cluster_to_bam_records: HashMap<String, Vec<Record>> = HashMap::new();
 
     let mut merged_header_view: Option<HeaderView> = None;
 
     // Construct BAM header for each per cluster BAM file by combining headers
     // of each per sample BAM file.
-    for cluster in clusters.iter() {
+    for (cluster, cluster_samples) in &cluster_to_samples_mapping.cluster_to_samples {
         // Get all BAM filenames for the cluster in BTreeMap key order.
-        let cluster_samples = &cluster_to_samples_mapping
-            .cluster_to_samples
-            .get(*cluster)
-            .unwrap()
-            .samples;
         let bam_filenames = bam_to_sample_mapping
             .bam_to_sample
             .iter()
             .filter_map(|(bam_filename, sample)| {
-                cluster_samples.contains(sample).then_some(bam_filename)
+                cluster_samples.samples.contains(sample).then_some(bam_filename)
             })
             .collect::<Vec<_>>();
 
