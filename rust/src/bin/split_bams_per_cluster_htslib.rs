@@ -224,21 +224,26 @@ struct ClusterToSamplesMapping {
     cluster_to_samples: BTreeMap<Cluster, SampleSet>,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct ClusterId {
+    id: usize,
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
-struct CellBarcodeOutputAndCluster {
+struct CellBarcodeOutputAndClusterId {
     cell_barcode_output: CellBarcodeOutput,
-    cluster: Cluster,
+    cluster_id: ClusterId,
 }
 
 #[derive(Clone, Debug, Default)]
-struct CellBarcodeInputToCellBarcodeOutputAndClusterMapping {
-    cb_input_to_cb_output_and_cluster: HashMap<CellBarcodeInput, CellBarcodeOutputAndCluster>,
+struct CellBarcodeInputToCellBarcodeOutputAndClusterIdMapping {
+    cb_input_to_cb_output_and_cluster_id: HashMap<CellBarcodeInput, CellBarcodeOutputAndClusterId>,
 }
 
 #[derive(Clone, Debug, Default)]
-struct SampleToCellBarcodeInputToCellBarcodeOutputAndClusterMapping {
-    sample_to_cb_and_cluster_mapping:
-        HashMap<Sample, CellBarcodeInputToCellBarcodeOutputAndClusterMapping>,
+struct SampleToCellBarcodeInputToCellBarcodeOutputAndClusterIdMapping {
+    sample_to_cb_and_cluster_id_mapping:
+        HashMap<Sample, CellBarcodeInputToCellBarcodeOutputAndClusterIdMapping>,
 }
 
 #[derive(Default)]
@@ -246,9 +251,10 @@ struct BamFileToBamIndexedReaderMapping {
     bam_to_reader: HashMap<BamFilename, IndexedReader>,
 }
 
-#[derive(Default)]
-struct ClusterToBamWriterMapping {
-    cluster_to_writer: HashMap<Cluster, Writer>,
+struct ClusterOutput {
+    cluster: Cluster,
+    writer: Writer,
+    records: Vec<Record>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -321,12 +327,12 @@ fn read_cluster_to_cb_and_sample_tsv_file(
     cluster_to_cb_and_sample_tsv_path: &Path,
 ) -> Result<(
     ClusterToSamplesMapping,
-    SampleToCellBarcodeInputToCellBarcodeOutputAndClusterMapping,
+    SampleToCellBarcodeInputToCellBarcodeOutputAndClusterIdMapping,
 )> {
     let mut cluster_to_samples_mapping = ClusterToSamplesMapping::default();
 
-    let mut sample_to_cb_input_to_cb_output_and_cluster_mapping =
-        SampleToCellBarcodeInputToCellBarcodeOutputAndClusterMapping::default();
+    let mut sample_to_cb_input_to_cb_output_and_cluster_id_mapping =
+        SampleToCellBarcodeInputToCellBarcodeOutputAndClusterIdMapping::default();
 
     // Build a CSV reader for a plain TSV file.
     let mut rdr = csv::ReaderBuilder::new()
@@ -338,8 +344,25 @@ fn read_cluster_to_cb_and_sample_tsv_file(
         .comment(Some(b'#'))
         .from_path(cluster_to_cb_and_sample_tsv_path)?;
 
-    for result in rdr.deserialize() {
-        let cluster_cb_sample_record: ClusterCbSampleRecord = result?;
+    let cluster_cb_sample_records = rdr
+        .deserialize()
+        .collect::<std::result::Result<Vec<ClusterCbSampleRecord>, csv::Error>>()?;
+
+    let mut clusters = cluster_cb_sample_records
+        .iter()
+        .map(|record| record.cluster.clone())
+        .collect::<Vec<_>>();
+    clusters.sort_unstable();
+    clusters.dedup();
+
+    let cluster_to_id_mapping = clusters
+        .into_iter()
+        .enumerate()
+        .map(|(id, cluster)| (cluster, ClusterId { id }))
+        .collect::<BTreeMap<_, _>>();
+
+    for cluster_cb_sample_record in cluster_cb_sample_records {
+        let cluster_id = cluster_to_id_mapping[&cluster_cb_sample_record.cluster];
 
         // Create cluster to samples mapping.
         cluster_to_samples_mapping
@@ -353,21 +376,21 @@ fn read_cluster_to_cb_and_sample_tsv_file(
         //   - level 1: Sample name to cell barcode input mapping
         //   - level 2: Cell barcode input to cell barcode output mapping
         //   - level 3: Cell barcode output to cluster mapping
-        sample_to_cb_input_to_cb_output_and_cluster_mapping
-            .sample_to_cb_and_cluster_mapping
+        sample_to_cb_input_to_cb_output_and_cluster_id_mapping
+            .sample_to_cb_and_cluster_id_mapping
             .entry(cluster_cb_sample_record.sample)
             .or_default()
-            .cb_input_to_cb_output_and_cluster
+            .cb_input_to_cb_output_and_cluster_id
             .entry(cluster_cb_sample_record.cell_barcode_input)
-            .or_insert(CellBarcodeOutputAndCluster {
+            .or_insert(CellBarcodeOutputAndClusterId {
                 cell_barcode_output: cluster_cb_sample_record.cell_barcode_output,
-                cluster: cluster_cb_sample_record.cluster,
+                cluster_id,
             });
     }
 
     Ok((
         cluster_to_samples_mapping,
-        sample_to_cb_input_to_cb_output_and_cluster_mapping,
+        sample_to_cb_input_to_cb_output_and_cluster_id_mapping,
     ))
 }
 
@@ -508,7 +531,7 @@ fn is_fragment_read(record: &Record, ignore_mate_mapping_quality: bool) -> bool 
 fn split_bams_per_cluster(
     bam_to_sample_mapping: &BamToSampleBTreeMapping,
     cluster_to_samples_mapping: &ClusterToSamplesMapping,
-    sample_to_cb_input_to_cb_output_and_cluster_mapping: &SampleToCellBarcodeInputToCellBarcodeOutputAndClusterMapping,
+    sample_to_cb_input_to_cb_output_and_cluster_id_mapping: &SampleToCellBarcodeInputToCellBarcodeOutputAndClusterIdMapping,
     output_prefix: &Path,
     chromosomes: &Option<Vec<String>>,
     fragment_reads_only: bool,
@@ -519,9 +542,8 @@ fn split_bams_per_cluster(
 ) -> Result<()> {
     let bam_thread_pool = ThreadPool::new(16)?;
     let mut bam_file_to_bam_indexed_reader_mapping = BamFileToBamIndexedReaderMapping::default();
-    let mut cluster_to_bam_writer_mapping = ClusterToBamWriterMapping::default();
-
-    let mut cluster_to_bam_records: HashMap<String, Vec<Record>> = HashMap::new();
+    let mut cluster_outputs =
+        Vec::with_capacity(cluster_to_samples_mapping.cluster_to_samples.len());
 
     let mut merged_header_view: Option<HeaderView> = None;
 
@@ -533,7 +555,10 @@ fn split_bams_per_cluster(
             .bam_to_sample
             .iter()
             .filter_map(|(bam_filename, sample)| {
-                cluster_samples.samples.contains(sample).then_some(bam_filename)
+                cluster_samples
+                    .samples
+                    .contains(sample)
+                    .then_some(bam_filename)
             })
             .collect::<Vec<_>>();
 
@@ -643,15 +668,11 @@ fn split_bams_per_cluster(
 
         cluster_bam_writer.set_thread_pool(&bam_thread_pool)?;
         cluster_bam_writer.set_compression_level(CompressionLevel::Fastest)?;
-        cluster_to_bam_writer_mapping
-            .cluster_to_writer
-            .entry((*cluster).clone())
-            .or_insert(cluster_bam_writer);
-
-        // Create empty vector to store BAM records for current cluster.
-        cluster_to_bam_records
-            .entry(cluster.to_string())
-            .or_default();
+        cluster_outputs.push(ClusterOutput {
+            cluster: cluster.clone(),
+            writer: cluster_bam_writer,
+            records: Vec::new(),
+        });
 
         // Store merged header view for first cluster for later use to get chromosome names and lengths.
         if merged_header_view.is_none() {
@@ -708,9 +729,9 @@ fn split_bams_per_cluster(
                     // Fetch chunk from current BAM file (coordinates are 0-based, and end is exclusive).
                     indexed_input_bam.fetch((tid, start, end))?;
 
-                    let sample_to_cb_input_to_cb_output_and_cluster_mapping =
-                        sample_to_cb_input_to_cb_output_and_cluster_mapping
-                            .sample_to_cb_and_cluster_mapping
+                    let cb_input_to_cb_output_and_cluster_id_mapping =
+                        sample_to_cb_input_to_cb_output_and_cluster_id_mapping
+                            .sample_to_cb_and_cluster_id_mapping
                             .get(sample)
                             .unwrap();
 
@@ -737,15 +758,15 @@ fn split_bams_per_cluster(
                             // Add BAM record with updated full barcode name to per
                             // cluster vector, if the barcode was in the list of
                             // filtered barcodes.
-                            if let Some(cb_output_and_cluster) =
-                                sample_to_cb_input_to_cb_output_and_cluster_mapping
-                                    .cb_input_to_cb_output_and_cluster
+                            if let Some(cb_output_and_cluster_id) =
+                                cb_input_to_cb_output_and_cluster_id_mapping
+                                    .cb_input_to_cb_output_and_cluster_id
                                     .get(&CellBarcodeInput(cb.to_owned()))
                             {
-                                let CellBarcodeOutputAndCluster {
+                                let CellBarcodeOutputAndClusterId {
                                     cell_barcode_output: cb_output,
-                                    cluster,
-                                } = cb_output_and_cluster;
+                                    cluster_id,
+                                } = cb_output_and_cluster_id;
 
                                 // Update CB tag value with full barcode name.
                                 record.update_aux(
@@ -753,12 +774,7 @@ fn split_bams_per_cluster(
                                     Aux::String(cb_output.as_str()),
                                 )?;
 
-                                // Add current BAM record to correct per cluster vector.
-                                if let Some(cluster_bam_records) =
-                                    cluster_to_bam_records.get_mut(cluster.as_str())
-                                {
-                                    cluster_bam_records.push(record);
-                                }
+                                cluster_outputs[cluster_id.id].records.push(record);
                             }
                         }
                     }
@@ -767,33 +783,27 @@ fn split_bams_per_cluster(
                 })?;
 
             // Sort reads by position (for the current chunk) for each cluster.
-            cluster_to_bam_records
-                .par_iter_mut()
-                .for_each(|(_cluster, cluster_bam_records)| {
-                    cluster_bam_records.sort_by_key(|record| (record.tid(), record.pos()));
-                });
+            cluster_outputs.par_iter_mut().for_each(|cluster_output| {
+                cluster_output
+                    .records
+                    .sort_by_key(|record| (record.tid(), record.pos()));
+            });
 
             // Write sorted reads to per cluster BAM files.
-            cluster_to_bam_records
-                .iter_mut()
-                .try_for_each(|(cluster, cluster_bam_records)| {
-                    println!(
-                        "Writing chunk {}:{}-{} for cluster {}",
-                        chrom_name, start, end, cluster
-                    );
-                    let cluster_bam_writer = cluster_to_bam_writer_mapping
-                        .cluster_to_writer
-                        .get_mut(&Cluster(cluster.clone()))
-                        .unwrap();
+            cluster_outputs.iter_mut().try_for_each(|cluster_output| {
+                println!(
+                    "Writing chunk {}:{}-{} for cluster {}",
+                    chrom_name, start, end, cluster_output.cluster
+                );
 
-                    for record in cluster_bam_records.iter() {
-                        cluster_bam_writer.write(record)?;
-                    }
+                for record in &cluster_output.records {
+                    cluster_output.writer.write(record)?;
+                }
 
-                    cluster_bam_records.clear();
+                cluster_output.records.clear();
 
-                    Ok::<(), rust_htslib::errors::Error>(())
-                })?;
+                Ok::<(), rust_htslib::errors::Error>(())
+            })?;
         }
     }
 
@@ -818,7 +828,7 @@ fn main() -> Result<()> {
             )
         })?;
 
-    let (cluster_to_samples_mapping, sample_to_cb_input_to_cb_output_and_cluster_mapping) =
+    let (cluster_to_samples_mapping, sample_to_cb_input_to_cb_output_and_cluster_id_mapping) =
         read_cluster_to_cb_and_sample_tsv_file(&cli.cluster_to_cb_and_sample_tsv_path)
             .with_context(|| {
                 format!(
@@ -830,7 +840,7 @@ fn main() -> Result<()> {
     split_bams_per_cluster(
         &bam_to_sample_mapping,
         &cluster_to_samples_mapping,
-        &sample_to_cb_input_to_cb_output_and_cluster_mapping,
+        &sample_to_cb_input_to_cb_output_and_cluster_id_mapping,
         &cli.output_prefix,
         &cli.chromosomes,
         cli.fragment_reads_only,
