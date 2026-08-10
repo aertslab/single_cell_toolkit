@@ -535,23 +535,19 @@ fn split_bams_per_cluster(
     // Construct BAM header for each per cluster BAM file by combining headers
     // of each per sample BAM file.
     for cluster in clusters.iter() {
-        // Get all bam filenames per cluster and sort them.
-        let mut bam_filenames = cluster_to_samples_mapping
+        // Get all BAM filenames for the cluster in BTreeMap key order.
+        let cluster_samples = &cluster_to_samples_mapping
             .cluster_to_samples
             .get(*cluster)
             .unwrap()
-            .samples
+            .samples;
+        let bam_filenames = bam_to_sample_mapping
+            .bam_to_sample
             .iter()
-            .flat_map(|sample| {
-                bam_to_sample_mapping
-                    .bam_to_sample
-                    .iter()
-                    .filter(|(_bam_filename, s)| *s == sample)
-                    .map(|(bam_filename, _sample)| bam_filename)
-                    .collect::<Vec<_>>()
+            .filter_map(|(bam_filename, sample)| {
+                cluster_samples.contains(sample).then_some(bam_filename)
             })
             .collect::<Vec<_>>();
-        bam_filenames.sort_unstable();
 
         // Create merged BAM header per cluster BAM file.
         let mut merged_header = Vec::new();
@@ -682,12 +678,12 @@ fn split_bams_per_cluster(
         bam_to_sample: bam_to_sample_mapping
             .bam_to_sample
             .iter()
-            .filter(|(bam_filename, _sample)| {
+            .filter_map(|(bam_filename, sample)| {
                 bam_file_to_bam_indexed_reader_mapping
                     .bam_to_reader
-                    .contains_key(*bam_filename)
+                    .contains_key(bam_filename)
+                    .then(|| (bam_filename.clone(), sample.clone()))
             })
-            .map(|(bam_filename, sample)| (bam_filename.clone(), sample.clone()))
             .collect(),
     };
 
@@ -786,8 +782,7 @@ fn split_bams_per_cluster(
             cluster_to_bam_records
                 .par_iter_mut()
                 .for_each(|(_cluster, cluster_bam_records)| {
-                    cluster_bam_records
-                        .sort_by(|a, b| a.tid().cmp(&b.tid()).then(a.pos().cmp(&b.pos())));
+                    cluster_bam_records.sort_by_key(|record| (record.tid(), record.pos()));
                 });
 
             // Write sorted reads to per cluster BAM files.
