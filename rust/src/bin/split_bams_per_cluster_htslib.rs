@@ -15,7 +15,6 @@ use num_iter::range_step_inclusive;
 use rust_htslib::bam::{
     record::Aux, CompressionLevel, Format, Header, HeaderView, IndexedReader, Read, Record, Writer,
 };
-use rust_htslib::tpool::ThreadPool;
 
 // This lets us write `#[derive(Deserialize)]`.
 use serde::Deserialize;
@@ -249,6 +248,12 @@ struct SampleToCellBarcodeInputToCellBarcodeOutputAndClusterIdMapping {
 #[derive(Default)]
 struct BamFileToBamIndexedReaderMapping {
     bam_to_reader: HashMap<BamFilename, IndexedReader>,
+}
+
+struct BamInput {
+    sample: Sample,
+    reader: IndexedReader,
+    per_cluster_records: Vec<Vec<Record>>,
 }
 
 struct ClusterOutput {
@@ -540,7 +545,11 @@ fn split_bams_per_cluster(
     chunk_size: u64,
     cmd_line_str: &str,
 ) -> Result<()> {
-    let bam_thread_pool = ThreadPool::new(16)?;
+    let rayon_thread_pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(16)
+        .build()
+        .context("failed to create Rayon thread pool")?;
+
     let mut bam_file_to_bam_indexed_reader_mapping = BamFileToBamIndexedReaderMapping::default();
     let mut cluster_outputs =
         Vec::with_capacity(cluster_to_samples_mapping.cluster_to_samples.len());
@@ -574,12 +583,7 @@ fn split_bams_per_cluster(
                 let bam = bam_file_to_bam_indexed_reader_mapping
                     .bam_to_reader
                     .entry((*bam_filename).clone())
-                    .or_insert({
-                        let mut indexed_input_bam =
-                            IndexedReader::from_path(bam_filename.as_path())?;
-                        indexed_input_bam.set_thread_pool(&bam_thread_pool)?;
-                        indexed_input_bam
-                    });
+                    .or_insert(IndexedReader::from_path(bam_filename.as_path())?);
 
                 // Read BAM header from current sample BAM file.
                 let original_header = Header::from_template(bam.header());
@@ -666,7 +670,6 @@ fn split_bams_per_cluster(
         let mut cluster_bam_writer =
             Writer::from_path(&cluster_bam_path, &merged_header, Format::Bam)?;
 
-        cluster_bam_writer.set_thread_pool(&bam_thread_pool)?;
         cluster_bam_writer.set_compression_level(CompressionLevel::Fastest)?;
         cluster_outputs.push(ClusterOutput {
             cluster: cluster.clone(),
@@ -682,60 +685,65 @@ fn split_bams_per_cluster(
 
     let merged_header_view = merged_header_view.unwrap();
 
-    // Filter out BAM files that are not in any requested cluster.
-    let bam_to_sample_mapping = BamToSampleBTreeMapping {
-        bam_to_sample: bam_to_sample_mapping
-            .bam_to_sample
-            .iter()
-            .filter_map(|(bam_filename, sample)| {
-                bam_file_to_bam_indexed_reader_mapping
-                    .bam_to_reader
-                    .contains_key(bam_filename)
-                    .then(|| (bam_filename.clone(), sample.clone()))
-            })
-            .collect(),
-    };
+    // Move initialized readers into BAM inputs with reusable per-cluster record buffers.
+    let mut bam_inputs = bam_to_sample_mapping
+        .bam_to_sample
+        .iter()
+        .filter_map(|(bam_filename, sample)| {
+            bam_file_to_bam_indexed_reader_mapping
+                .bam_to_reader
+                .remove(bam_filename)
+                .map(|reader| {
+                    BamInput {
+                        sample: sample.clone(),
+                        reader,
+                        per_cluster_records: (0..cluster_outputs.len())
+                            .map(|_| Vec::new())
+                            .collect(),
+                    }
+                })
+        })
+        .collect::<Vec<_>>();
 
     // Loop over each chromosome and fetch reads in chunks from each BAM file and sort
     // them by position before writing them to the per cluster BAM file.
-    for tid in 0..merged_header_view.target_count() {
-        let chrom_name = std::str::from_utf8(merged_header_view.tid2name(tid))
-            .context("Chromosome name is not valid UTF-8.")?
-            .to_string();
-        if chromosomes.is_some() && !chromosomes.as_ref().unwrap().contains(&chrom_name) {
-            continue;
-        }
+    rayon_thread_pool.install(|| -> Result<()> {
+        for tid in 0..merged_header_view.target_count() {
+            let chrom_name = std::str::from_utf8(merged_header_view.tid2name(tid))
+                .context("Chromosome name is not valid UTF-8.")?
+                .to_string();
+            if chromosomes.is_some() && !chromosomes.as_ref().unwrap().contains(&chrom_name) {
+                continue;
+            }
 
-        let chrom_end = merged_header_view.target_len(tid).unwrap();
+            let chrom_end = merged_header_view.target_len(tid).unwrap();
 
-        // Fetch reads from each BAM file for each cluster in chunks of 10_000_000 bp and sort them by position.
-        for (start, end) in
-            range_step_inclusive(0, chrom_end + chunk_size - 1, chunk_size).tuple_windows()
-        {
-            // Make sure that the end of the chunk is not larger than the end of the chromosome.
-            let end = if end > chrom_end { chrom_end } else { end };
+            // Fetch reads from each BAM file for each cluster in chunks of 10_000_000 bp and sort them by position.
+            for (start, end) in
+                range_step_inclusive(0, chrom_end + chunk_size - 1, chunk_size).tuple_windows()
+            {
+                // Make sure that the end of the chunk is not larger than the end of the chromosome.
+                let end = if end > chrom_end { chrom_end } else { end };
 
-            let start = start as i64;
-            let end = end as i64;
+                let start = start as i64;
+                let end = end as i64;
 
-            bam_to_sample_mapping
-                .bam_to_sample
-                .iter()
-                .try_for_each(|(bam_filename, sample)| {
-                    let indexed_input_bam = bam_file_to_bam_indexed_reader_mapping
-                        .bam_to_reader
-                        .get_mut(bam_filename)
-                        .unwrap();
+                bam_inputs.par_iter_mut().try_for_each(|bam_input| {
+                    let indexed_input_bam = &mut bam_input.reader;
                     // Fetch chunk from current BAM file (coordinates are 0-based, and end is exclusive).
                     indexed_input_bam.fetch((tid, start, end))?;
 
                     let cb_input_to_cb_output_and_cluster_id_mapping =
                         sample_to_cb_input_to_cb_output_and_cluster_id_mapping
                             .sample_to_cb_and_cluster_id_mapping
-                            .get(sample)
+                            .get(&bam_input.sample)
                             .unwrap();
 
-                    // Filter reads of current chunk and write them to a per cluster vector.
+                    for per_cluster_records in &mut bam_input.per_cluster_records {
+                        per_cluster_records.clear();
+                    }
+
+                    // Filter reads of current chunk and collect them by output cluster.
                     for r in indexed_input_bam.records() {
                         let mut record = r?;
 
@@ -756,7 +764,7 @@ fn split_bams_per_cluster(
 
                         if let Ok(Aux::String(cb)) = record.aux(cb_tag.as_bytes()) {
                             // Add BAM record with updated full barcode name to per
-                            // cluster vector, if the barcode was in the list of
+                            // cluster records, if the barcode was in the list of
                             // filtered barcodes.
                             if let Some(cb_output_and_cluster_id) =
                                 cb_input_to_cb_output_and_cluster_id_mapping
@@ -774,7 +782,7 @@ fn split_bams_per_cluster(
                                     Aux::String(cb_output.as_str()),
                                 )?;
 
-                                cluster_outputs[cluster_id.id].records.push(record);
+                                bam_input.per_cluster_records[cluster_id.id].push(record);
                             }
                         }
                     }
@@ -782,32 +790,47 @@ fn split_bams_per_cluster(
                     Ok::<(), rust_htslib::errors::Error>(())
                 })?;
 
-            // Sort reads by position (for the current chunk) for each cluster.
-            cluster_outputs.par_iter_mut().for_each(|cluster_output| {
-                cluster_output
-                    .records
-                    .sort_by_key(|record| (record.tid(), record.pos()));
-            });
-
-            // Write sorted reads to per cluster BAM files.
-            cluster_outputs.iter_mut().try_for_each(|cluster_output| {
-                println!(
-                    "Writing chunk {}:{}-{} for cluster {}",
-                    chrom_name, start, end, cluster_output.cluster
-                );
-
-                for record in &cluster_output.records {
-                    cluster_output.writer.write(record)?;
+                // Merge each BAM input's per-cluster buffers into the corresponding
+                // aggregate output buffers. `append` leaves the per-BAM buffers empty
+                // while retaining their capacity for the next chunk.
+                for bam_input in &mut bam_inputs {
+                    for (cluster_output, bam_cluster_records) in cluster_outputs
+                        .iter_mut()
+                        .zip(&mut bam_input.per_cluster_records)
+                    {
+                        cluster_output.records.append(bam_cluster_records);
+                    }
                 }
 
-                cluster_output.records.clear();
+                // Sort reads by position (for the current chunk) for each cluster.
+                cluster_outputs.par_iter_mut().for_each(|cluster_output| {
+                    cluster_output
+                        .records
+                        .sort_by_key(|record| (record.tid(), record.pos()));
+                });
 
-                Ok::<(), rust_htslib::errors::Error>(())
-            })?;
+                // Write sorted reads to per cluster BAM files.
+                cluster_outputs
+                    .par_iter_mut()
+                    .try_for_each(|cluster_output| {
+                        println!(
+                            "Writing chunk {}:{}-{} for cluster {}",
+                            chrom_name, start, end, cluster_output.cluster
+                        );
+
+                        for record in &cluster_output.records {
+                            cluster_output.writer.write(record)?;
+                        }
+
+                        cluster_output.records.clear();
+
+                        Ok::<(), rust_htslib::errors::Error>(())
+                    })?;
+            }
         }
-    }
 
-    Ok(())
+        Ok(())
+    })
 }
 
 fn main() -> Result<()> {
