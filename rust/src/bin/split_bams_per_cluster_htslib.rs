@@ -106,9 +106,8 @@ struct Cli {
         long = "chunk_size",
         required = false,
         default_value_t = 1_000_000,
-        help = "Fetch reads from each BAM file in chunks of X bp. Default: 1_000_000.",
-        long_help = "Fetch reads from each BAM file for each cluster in chunks of X bp\n\
-        (default: 1_000_000) and sort them by position.\n\
+        help = "Fetch reads from each BAM file in chunks of X bp.",
+        long_help = "Fetch reads from each BAM file in chunks of X bp.\n\
         Reduce this value if split_bams_per_cluster_htslib uses too much memory or\n\
         increase this value if split_bams_per_cluster_htslib reads very sparse BAM files."
     )]
