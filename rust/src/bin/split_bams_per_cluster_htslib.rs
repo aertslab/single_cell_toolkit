@@ -728,6 +728,11 @@ fn split_bams_per_cluster(
                 let start = start as i64;
                 let end = end as i64;
 
+                println!(
+                    "Read reads for {}:{}-{} from input BAM files...",
+                    chrom_name, start, end
+                );
+
                 bam_inputs.par_iter_mut().try_for_each(|bam_input| {
                     let indexed_input_bam = &mut bam_input.reader;
                     // Fetch chunk from current BAM file (coordinates are 0-based, and end is exclusive).
@@ -802,21 +807,18 @@ fn split_bams_per_cluster(
                     }
                 }
 
-                // Sort reads by position (for the current chunk) for each cluster.
-                cluster_outputs.par_iter_mut().for_each(|cluster_output| {
-                    cluster_output
-                        .records
-                        .sort_by_key(|record| (record.tid(), record.pos()));
-                });
+                println!(
+                    "Write reads for {}:{}-{} to per cluster BAM files...",
+                    chrom_name, start, end
+                );
 
-                // Write sorted reads to per cluster BAM files.
+                // Sort reads by position for each cluster and write them to per cluster BAM files.
                 cluster_outputs
                     .par_iter_mut()
                     .try_for_each(|cluster_output| {
-                        println!(
-                            "Writing chunk {}:{}-{} for cluster {}",
-                            chrom_name, start, end, cluster_output.cluster
-                        );
+                        cluster_output
+                            .records
+                            .sort_by_key(|record| (record.tid(), record.pos()));
 
                         for record in &cluster_output.records {
                             cluster_output.writer.write(record)?;
