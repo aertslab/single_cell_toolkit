@@ -93,8 +93,8 @@ struct Cli {
     )]
     ignore_mate_mapping_quality: bool,
     #[arg(
-        short = 't',
-        long = "cb_tag",
+        short = 'd',
+        long = "tag",
         required = false,
         default_value = "CB",
         help = "SAM tag to use to look for the cell barcodes in the BAM files.",
@@ -838,12 +838,8 @@ fn split_bams_per_cluster(
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let cmd_line_str = format!(
-        "split_bams_per_cluster_htslib -s {} -c {} -o {}",
-        &cli.sample_to_bam_tsv_path.to_string_lossy(),
-        &cli.cluster_to_cb_and_sample_tsv_path.to_string_lossy(),
-        &cli.output_prefix.to_string_lossy()
-    );
+    // Get full command line so it can be added later to the PG line in the BAM header.
+    let cmd_line_str = std::env::args().collect::<Vec<_>>().join(" ");
 
     let bam_to_sample_mapping = read_sample_to_bam_tsv_file(&cli.sample_to_bam_tsv_path)
         .with_context(|| {
