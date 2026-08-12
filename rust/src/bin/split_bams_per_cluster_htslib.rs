@@ -102,6 +102,16 @@ struct Cli {
     )]
     cb_tag: CellBarcodeTag,
     #[arg(
+        short = 't',
+        long = "threads",
+        required = false,
+        default_value_t = 16,
+        help = "Number of threads to use.",
+        long_help = "Number of threads to use for reading input BAM files and writing cluster BAM files.\n\
+        Set to 0 to use the number of logical CPUs available on the machine."
+    )]
+    threads: usize,
+    #[arg(
         short = 'C',
         long = "chunk_size",
         required = false,
@@ -541,11 +551,12 @@ fn split_bams_per_cluster(
     fragment_reads_only: bool,
     ignore_mate_mapping_quality: bool,
     cb_tag: &CellBarcodeTag,
+    threads: usize,
     chunk_size: u64,
     cmd_line_str: &str,
 ) -> Result<()> {
     let rayon_thread_pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(16)
+        .num_threads(threads)
         .build()
         .context("failed to create Rayon thread pool")?;
 
@@ -866,6 +877,7 @@ fn main() -> Result<()> {
         cli.fragment_reads_only,
         cli.ignore_mate_mapping_quality,
         &cli.cb_tag,
+        cli.threads,
         cli.chunk_size,
         &cmd_line_str,
     )
