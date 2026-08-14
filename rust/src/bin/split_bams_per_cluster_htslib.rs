@@ -244,14 +244,15 @@ struct CellBarcodeOutputAndClusterId {
 }
 
 #[derive(Clone, Debug, Default)]
-struct CellBarcodeInputToCellBarcodeOutputAndClusterIdMapping {
-    cb_input_to_cb_output_and_cluster_id: HashMap<CellBarcodeInput, CellBarcodeOutputAndClusterId>,
+struct CellBarcodeInputToCellBarcodeOutputsAndClusterIdsMapping {
+    cb_input_to_cb_outputs_and_cluster_ids:
+        HashMap<CellBarcodeInput, Vec<CellBarcodeOutputAndClusterId>>,
 }
 
 #[derive(Clone, Debug, Default)]
-struct SampleToCellBarcodeInputToCellBarcodeOutputAndClusterIdMapping {
-    sample_to_cb_and_cluster_id_mapping:
-        HashMap<Sample, CellBarcodeInputToCellBarcodeOutputAndClusterIdMapping>,
+struct SampleToCellBarcodeInputToCellBarcodeOutputsAndClusterIdsMapping {
+    sample_to_cbs_and_cluster_ids_mapping:
+        HashMap<Sample, CellBarcodeInputToCellBarcodeOutputsAndClusterIdsMapping>,
 }
 
 #[derive(Default)]
@@ -341,12 +342,12 @@ fn read_cluster_to_cb_and_sample_tsv_file(
     cluster_to_cb_and_sample_tsv_path: &Path,
 ) -> Result<(
     ClusterToSamplesMapping,
-    SampleToCellBarcodeInputToCellBarcodeOutputAndClusterIdMapping,
+    SampleToCellBarcodeInputToCellBarcodeOutputsAndClusterIdsMapping,
 )> {
     let mut cluster_to_samples_mapping = ClusterToSamplesMapping::default();
 
     let mut sample_to_cb_input_to_cb_output_and_cluster_id_mapping =
-        SampleToCellBarcodeInputToCellBarcodeOutputAndClusterIdMapping::default();
+        SampleToCellBarcodeInputToCellBarcodeOutputsAndClusterIdsMapping::default();
 
     // Build a CSV reader for a plain TSV file.
     let mut rdr = csv::ReaderBuilder::new()
@@ -388,15 +389,15 @@ fn read_cluster_to_cb_and_sample_tsv_file(
 
         // Create nested hashmap with multiple levels:
         //   - level 1: Sample name to cell barcode input mapping
-        //   - level 2: Cell barcode input to cell barcode output mapping
-        //   - level 3: Cell barcode output to cluster mapping
+        //   - level 2: Cell barcode input to cell barcode outputs and cluster ids mapping
         sample_to_cb_input_to_cb_output_and_cluster_id_mapping
-            .sample_to_cb_and_cluster_id_mapping
+            .sample_to_cbs_and_cluster_ids_mapping
             .entry(cluster_cb_sample_record.sample)
             .or_default()
-            .cb_input_to_cb_output_and_cluster_id
+            .cb_input_to_cb_outputs_and_cluster_ids
             .entry(cluster_cb_sample_record.cell_barcode_input)
-            .or_insert(CellBarcodeOutputAndClusterId {
+            .or_default()
+            .push(CellBarcodeOutputAndClusterId {
                 cell_barcode_output: cluster_cb_sample_record.cell_barcode_output,
                 cluster_id,
             });
@@ -545,7 +546,7 @@ fn is_fragment_read(record: &Record, ignore_mate_mapping_quality: bool) -> bool 
 fn split_bams_per_cluster(
     bam_to_sample_mapping: &BamToSampleBTreeMapping,
     cluster_to_samples_mapping: &ClusterToSamplesMapping,
-    sample_to_cb_input_to_cb_output_and_cluster_id_mapping: &SampleToCellBarcodeInputToCellBarcodeOutputAndClusterIdMapping,
+    sample_to_cb_input_to_cb_output_and_cluster_id_mapping: &SampleToCellBarcodeInputToCellBarcodeOutputsAndClusterIdsMapping,
     output_prefix: &Path,
     chromosomes: &Option<Vec<String>>,
     fragment_reads_only: bool,
@@ -750,7 +751,7 @@ fn split_bams_per_cluster(
 
                     let cb_input_to_cb_output_and_cluster_id_mapping =
                         sample_to_cb_input_to_cb_output_and_cluster_id_mapping
-                            .sample_to_cb_and_cluster_id_mapping
+                            .sample_to_cbs_and_cluster_ids_mapping
                             .get(&bam_input.sample)
                             .unwrap();
 
@@ -781,23 +782,55 @@ fn split_bams_per_cluster(
                             // Add BAM record with updated full barcode name to per
                             // cluster records, if the barcode was in the list of
                             // filtered barcodes.
-                            if let Some(cb_output_and_cluster_id) =
+                            if let Some(cb_output_and_cluster_ids) =
                                 cb_input_to_cb_output_and_cluster_id_mapping
-                                    .cb_input_to_cb_output_and_cluster_id
+                                    .cb_input_to_cb_outputs_and_cluster_ids
                                     .get(&CellBarcodeInput(cb.to_owned()))
                             {
-                                let CellBarcodeOutputAndClusterId {
-                                    cell_barcode_output: cb_output,
-                                    cluster_id,
-                                } = cb_output_and_cluster_id;
+                                match cb_output_and_cluster_ids.as_slice() {
+                                    [] => {}
 
-                                // Update CB tag value with full barcode name.
-                                record.update_aux(
-                                    cb_tag.as_bytes(),
-                                    Aux::String(cb_output.as_str()),
-                                )?;
+                                    [only] => {
+                                        record.update_aux(
+                                            cb_tag.as_bytes(),
+                                            Aux::String(only.cell_barcode_output.as_str()),
+                                        )?;
+                                        bam_input.per_cluster_records[only.cluster_id.id]
+                                            .push(record);
+                                    }
 
-                                bam_input.per_cluster_records[cluster_id.id].push(record);
+                                    [first, middle @ .., last] => {
+                                        record.update_aux(
+                                            cb_tag.as_bytes(),
+                                            Aux::String(first.cell_barcode_output.as_str()),
+                                        )?;
+                                        let mut prev_output = &first.cell_barcode_output;
+
+                                        bam_input.per_cluster_records[first.cluster_id.id]
+                                            .push(record.clone());
+
+                                        for entry in middle {
+                                            if entry.cell_barcode_output != *prev_output {
+                                                record.update_aux(
+                                                    cb_tag.as_bytes(),
+                                                    Aux::String(entry.cell_barcode_output.as_str()),
+                                                )?;
+                                                prev_output = &entry.cell_barcode_output;
+                                            }
+                                            bam_input.per_cluster_records[entry.cluster_id.id]
+                                                .push(record.clone());
+                                        }
+
+                                        if last.cell_barcode_output != *prev_output {
+                                            record.update_aux(
+                                                cb_tag.as_bytes(),
+                                                Aux::String(last.cell_barcode_output.as_str()),
+                                            )?;
+                                        }
+                                        bam_input.per_cluster_records[last.cluster_id.id]
+                                            .push(record);
+                                    }
+                                }
                             }
                         }
                     }
