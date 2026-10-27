@@ -197,6 +197,7 @@ srr_number_to_sample_name () {
     sample_name="${sample_name//]/_}";
     sample_name="${sample_name//{/_}";
     sample_name="${sample_name//\}/_}";
+    sample_name="${sample_name//:/_}";
 
     echo "${sample_name}";
 }
