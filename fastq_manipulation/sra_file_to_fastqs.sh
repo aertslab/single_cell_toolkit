@@ -204,4 +204,115 @@ srr_number_to_sample_name () {
 
 
 
+gse_number_to_srr_numbers () {
+    local gse_number="${1}"
+
+    if [ "$#" -ne 1 ]; then
+        printf '\nUsage:\n'
+        printf '    gse_number_to_srr_numbers gse_number\n\n'
+        printf 'Purpose:\n'
+        printf '    Resolve all SRA run accessions associated with a GEO GSE number.\n\n'
+        printf 'Parameters:\n'
+        printf '    gse_number: GEO GSE number (e.g. GSE304221) for which to look up\n'
+        printf '                all associated SRA run accessions.\n\n'
+        return 1
+    fi
+
+    if [[ ! "${gse_number}" =~ ^GSE[0-9]+$ ]]; then
+        printf 'Error: invalid GEO Series accession "%s".\n' \
+            "${gse_number}" >&2
+        return 1
+    fi
+
+    if ! command -v curl > /dev/null 2>&1; then
+        printf 'Error: "curl" is not installed.\n' >&2
+        return 1
+    fi
+
+    if ! command -v esearch > /dev/null 2>&1; then
+        printf 'Error: "esearch" (from EDirect) is not installed.\n' >&2
+        return 1
+    fi
+
+    if ! command -v efetch > /dev/null 2>&1; then
+        printf 'Error: "efetch" (from EDirect) is not installed.\n' >&2
+        return 1
+    fi
+
+    # Do not rely on the Entrez gds -> sra link for resolving a GSE to SRA.
+    # Although NCBI defines a gds_sra cross-database link, it is not populated
+    # for every GEO Series with associated SRA data. Instead, retrieve the GEO
+    # Series metadata directly in SOFT format and extract its linked SRA Study
+    # or BioProject accession.
+    local geo_metadata
+
+    if ! geo_metadata=$(
+        curl -fsSL \
+            "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=${gse_number}&targ=self&view=brief&form=text"
+    ); then
+        printf 'Error: could not retrieve GEO metadata for GEO GSE number "%s".\n' \
+            "${gse_number}" >&2
+        return 1
+    fi
+
+    if [ -z "${geo_metadata}" ]; then
+        printf 'Error: GEO returned empty metadata for GEO GSE number "%s".\n' \
+            "${gse_number}" >&2
+        return 1
+    fi
+
+    # Prefer a linked SRA Study accession (SRP), since this identifies the
+    # sequencing study directly. If GEO does not expose an SRP accession,
+    # fall back to the linked BioProject accession.
+    #
+    # GEO records do not expose these links under one completely consistent
+    # SOFT field name, so extract the accession from the complete Series
+    # metadata rather than relying on a particular field label.
+    local sra_query_accession
+    local sra_query_field
+
+    sra_query_accession=$(
+        printf '%s\n' "${geo_metadata}" \
+            | grep -oE 'SRP[0-9]+' \
+            | head -n 1
+    )
+
+    if [ -n "${sra_query_accession}" ]; then
+        sra_query_field='Accession'
+    else
+        sra_query_accession=$(
+            printf '%s\n' "${geo_metadata}" \
+                | grep -oE 'PRJ[A-Z]{2,3}[0-9]+' \
+                | head -n 1
+        )
+        sra_query_field='BioProject'
+    fi
+
+    if [ -z "${sra_query_accession}" ]; then
+        printf 'Error: could not find an SRA Study or BioProject accession for GEO GSE number "%s".\n' \
+            "${gse_number}" >&2
+        return 1
+    fi
+
+    local srr_numbers
+    srr_numbers=$(
+        esearch -db sra \
+            -query "${sra_query_accession}[${sra_query_field}]" \
+        | efetch -format runinfo \
+        | cut -d ',' -f 1 \
+        | grep -E '^[SED]RR[0-9]+$' \
+        | sort -u
+    )
+
+    if [ -z "${srr_numbers}" ]; then
+        printf 'Error: could not find any SRA run accessions for GEO GSE number "%s".\n' \
+            "${gse_number}" >&2
+        return 1
+    fi
+
+    printf '%s\n' "${srr_numbers}"
+}
+
+
+
 sra_file_to_fastqs "${@}";
